@@ -1,0 +1,168 @@
+================================================================================
+INTERVIEW SCRIPT #01: Java Backend Developer
+================================================================================
+Duration: ~15-20 minutes
+Difficulty: Mid-Senior
+Focus: Core Java, OOP, Collections, Concurrency
+
+EDGE CASES TESTED:
+- Mid-sentence pauses
+- Follow-up questions (same topic)
+- Interruptions
+- Rephrasing
+- Fast/slow speech
+- Filler words and mumbling
+- Two-part questions
+- Background noise
+
+INSTRUCTIONS:
+- [PAUSE Xs] = pause for X seconds mid-sentence
+- [FOLLOW-UP] = ask after candidate answers
+- [INTERRUPT] = cut off candidate mid-answer
+- [REPHRASE] = start, stop, rephrase the question
+- [MUMBLE] = unclear "um", "uh", filler words
+- [FAST] = speak quickly, no pauses
+- [SLOW] = speak deliberately, word by word
+- [BACKGROUND] = cough, drink water, paper shuffle
+- [SKEPTICAL] = questioning tone, like you disagree
+
+================================================================================
+
+Q1 [BASELINE - CLEAN]
+"Let's start with something simple. What is the difference between JDK, JRE, and JVM?"
+
+---
+
+Q2 [PAUSE MID-SENTENCE]
+"Okay good. Now can you explain... [PAUSE 3s] ...the four pillars of object oriented programming?"
+
+---
+
+Q3 [FOLLOW-UP - SAME TOPIC]
+"What's the difference between abstract class and interface?"
+
+[FOLLOW-UP after answer]:
+"And when would you choose one over the other in a real project?"
+
+---
+
+Q4 [REPHRASE - FALSE START]
+"Can you give me... actually let me rephrase that. What is polymorphism and can you show me a quick example?"
+
+---
+
+Q5 [INTERRUPT - ADD CONTEXT]
+"How does garbage collection work in—"
+[PAUSE 1s, then continue before candidate speaks]
+"—actually, specifically tell me about the generations, young gen, old gen, that stuff"
+
+---
+
+Q6 [MUMBLE + FILLER WORDS]
+"Uhh so like... [MUMBLE] ...stack versus heap, what's the... you know, the main difference there?"
+
+---
+
+Q7 [FAST SPEECH - NO PAUSES]
+"Why-is-String-immutable-in-Java-and-what-are-the-performance-benefits-of-that?"
+
+---
+
+Q8 [TWO-PART QUESTION]
+"String, StringBuilder, StringBuffer. What are the differences between them? And which one is thread-safe?"
+
+---
+
+Q9 [LONG PAUSE - DRINKING WATER]
+"ArrayList versus LinkedList... [PAUSE 4s] [BACKGROUND: drinking/rustling sound] ...sorry about that. When would you use each one?"
+
+---
+
+Q10 [DEEP DIVE - MULTIPLE FOLLOW-UPS]
+"How does HashMap work internally?"
+
+[FOLLOW-UP 1]: "What happens when there's a hash collision?"
+
+[FOLLOW-UP 2]: "And what's the time complexity for get and put?"
+
+[FOLLOW-UP 3]: "What changed in Java 8 for HashMap?"
+
+---
+
+Q11 [INTERRUPT CANDIDATE MID-ANSWER]
+"What's the difference between HashSet and TreeSet?"
+
+[INTERRUPT after candidate speaks for 5-10 seconds]:
+"Sorry to interrupt - can you also mention the ordering guarantees for each?"
+
+---
+
+Q12 [SLOW DELIBERATE SPEECH]
+"What... is... the difference... between a thread... and a process?"
+
+---
+
+Q13 [CONTEXT SWITCH - RELATED TOPIC]
+"Explain the synchronized keyword in Java"
+
+[FOLLOW-UP - TRICK QUESTION]:
+"Now what about volatile? Is that the same thing?"
+
+---
+
+Q14 [SCENARIO-BASED - LONG QUESTION]
+"Okay here's a scenario. You have two threads and two locks. Thread A holds lock one and is waiting for lock two. Thread B holds lock two and is waiting for lock one. What is this situation called and how would you prevent it?"
+
+---
+
+Q15 [CASUAL CONVERSATIONAL TONE]
+"So like, checked versus unchecked exceptions - I always mix them up honestly, can you explain which is which and when you'd use each?"
+
+---
+
+Q16 [PAUSE THEN CONTINUE - THINKING]
+"Lambda expressions... [PAUSE 2s] hmm... [PAUSE 1s] ...what are they exactly and why did Java 8 add them?"
+
+---
+
+Q17 [GIVE CONTEXT - PRACTICAL EXAMPLE]
+"Stream API. So let's say I have a list of User objects and I want to filter users older than 25 and collect just their names into a new list. How would you write that?"
+
+---
+
+Q18 [SKEPTICAL TONE - CHALLENGE]
+"Optional class. [SKEPTICAL] Some people on my team say it's overused and just adds noise. What is it, and do you actually use it in production code?"
+
+---
+
+Q19 [COMPOUND QUESTION]
+"Dependency injection - what is it, why is it useful, and what's the difference between constructor injection and setter injection?"
+
+---
+
+Q20 [FINAL - OPEN ENDED WITH FOLLOW-UP]
+"Last one. Singleton pattern. How would you implement it?"
+
+[FOLLOW-UP]:
+"What are the gotchas? Specifically in a multi-threaded environment?"
+
+[OPTIONAL FOLLOW-UP if time]:
+"What about using enum for singleton?"
+
+================================================================================
+END OF INTERVIEW
+================================================================================
+
+EXPECTED EDGE CASE RESULTS:
+- Q2: VAD should wait for full question after pause
+- Q3: System should recognize follow-up is same topic
+- Q4: Should use rephrased version, not false start
+- Q5: Should combine both parts as one question
+- Q6: Should handle filler words, extract actual question
+- Q7: Should transcribe correctly despite fast speech
+- Q9: Should ignore background noise, wait for continuation
+- Q10: Multiple follow-ups on same topic (HashMap)
+- Q11: Should handle interruption gracefully
+- Q13: Should recognize volatile as related to synchronized
+- Q14: Should detect "deadlock" as topic
+- Q18: Should not be confused by skeptical framing

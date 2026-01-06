@@ -1,0 +1,142 @@
+SYSTEM DESIGN INTERVIEW - ELEVENLABS READY
+===========================================
+Copy each question block into ElevenLabs. Generate separately for different voice styles.
+
+Voice recommendation: "Adam" (senior interviewer tone)
+Settings: Stability 0.6, Clarity 0.75
+
+PAUSE SYNTAX: <break time="Xs"/> (max 3 seconds, self-closing only)
+
+---
+
+Q1
+Let's start broad. How would you design a URL shortener like bit dot ly?
+
+---
+
+Q1 PROBE
+What's your database schema?
+
+---
+
+Q1 FOLLOW-UP
+How do you generate the short code?
+
+---
+
+Q2
+Let's say we have 100 million URLs, 10 thousand requests per second. How does your design change?
+
+---
+
+Q3
+You mentioned using a relational database. Why not NoSQL? What's the trade-off there?
+
+---
+
+Q4
+Caching. Where would you add caching in this system and what caching strategy would you use?
+
+---
+
+Q4 FOLLOW-UP
+LRU versus LFU. When would you pick one over the other?
+
+---
+
+Q5
+What if we need analytics too? Tracking how many times each link was clicked, from what country, what device?
+
+---
+
+Q6
+New problem. Design Twitter's home timeline. Users follow other users, they post tweets, and when you open the app you see tweets from people you follow sorted by time. How would you build this?
+
+---
+
+Q7
+You mentioned fan-out. Explain fan-out-on-write versus fan-out-on-read. Which would you choose and why?
+
+---
+
+Q8
+What if a user has 10 million followers and they tweet? How do you handle that? The celebrity problem.
+
+---
+
+Q9
+Database sharding <break time="3.0s"/> how would you shard the tweets table? What's your sharding key?
+
+---
+
+Q10
+You said shard by user ID. But what about hot spots? What if one user is way more active than others?
+
+---
+
+Q11
+CAP theorem. Where does your Twitter design fall? Is it CP or AP? Why?
+
+---
+
+Q11 FOLLOW-UP
+Is eventual consistency okay here? What could go wrong?
+
+---
+
+Q12
+New problem. Design a real-time chat system like WhatsApp or Slack. Focus on message delivery.
+
+---
+
+Q13
+WebSockets versus long polling versus Server-Sent Events. Walk me through the trade-offs.
+
+---
+
+Q14
+What happens when a user is offline? How do you guarantee message delivery when they come back online?
+
+---
+
+Q15
+Message ordering and delivery guarantees. How do you ensure messages arrive in order? What about exactly-once delivery, is that even possible?
+
+---
+
+Q16
+You mentioned using Kafka. Isn't that overkill for a chat app? Why not just use a simple message queue?
+
+---
+
+Q17
+Different topic. Design a rate limiter. How would you implement rate limiting for an API?
+
+---
+
+Q17 FOLLOW-UP
+Token bucket versus sliding window. Explain both.
+
+---
+
+Q18
+Now make it distributed. Multiple API servers behind a load balancer. How does your rate limiter work across all of them?
+
+---
+
+Q19
+Redis for rate limiting. What happens if Redis goes down? What's your fallback strategy?
+
+---
+
+Q20
+Last one. When you're doing system design in general, how do you decide between building something yourself versus using a managed service? What's your decision framework?
+
+---
+
+Q20 OPTIONAL
+Give me an example where you made that trade-off.
+
+===========================================
+END - Total: 20 questions + follow-ups
+===========================================

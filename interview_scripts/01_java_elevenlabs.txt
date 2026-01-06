@@ -1,0 +1,152 @@
+JAVA BACKEND INTERVIEW - ELEVENLABS READY
+==========================================
+Copy each question block into ElevenLabs. Generate separately for different voice styles.
+
+Voice recommendation: "Adam" or "Daniel" (professional male)
+Settings: Stability 0.5, Clarity 0.75
+
+PAUSE SYNTAX: <break time="Xs"/> (max 3 seconds, self-closing only)
+
+---
+
+Q1
+Let's start with something simple. What is the difference between JDK, JRE, and JVM?
+
+---
+
+Q2
+Okay good. Now can you explain <break time="3.0s"/> the four pillars of object oriented programming?
+
+---
+
+Q3
+What's the difference between abstract class and interface?
+
+---
+
+Q3 FOLLOW-UP (generate separately, play after candidate answers)
+And when would you choose one over the other in a real project?
+
+---
+
+Q4
+Can you give me <break time="1.0s"/> actually let me rephrase that. What is polymorphism and can you show me a quick example?
+
+---
+
+Q5
+How does garbage collection work in <break time="1.0s"/> actually, specifically tell me about the generations, young gen, old gen, that stuff.
+
+---
+
+Q6
+Uh so like, um <break time="0.5s"/> stack versus heap, what's the <break time="0.5s"/> you know, the main difference there?
+
+---
+
+Q7 (generate with Stability: 0.3 for faster speech)
+Why is String immutable in Java and what are the performance benefits of that?
+
+---
+
+Q8
+String, StringBuilder, StringBuffer. What are the differences between them? And which one is thread safe?
+
+---
+
+Q9
+ArrayList versus LinkedList <break time="3.0s"/> sorry about that. When would you use each one?
+
+---
+
+Q10
+How does HashMap work internally?
+
+---
+
+Q10 FOLLOW-UP 1
+What happens when there's a hash collision?
+
+---
+
+Q10 FOLLOW-UP 2
+And what's the time complexity for get and put?
+
+---
+
+Q10 FOLLOW-UP 3
+What changed in Java 8 for HashMap?
+
+---
+
+Q11
+What's the difference between HashSet and TreeSet?
+
+---
+
+Q11 INTERRUPT (play 5-10 seconds after candidate starts answering)
+Sorry to interrupt, can you also mention the ordering guarantees for each?
+
+---
+
+Q12 (generate with Stability: 0.9 for slower speech)
+What <break time="0.8s"/> is <break time="0.8s"/> the difference <break time="0.8s"/> between a thread <break time="0.8s"/> and a process?
+
+---
+
+Q13
+Explain the synchronized keyword in Java.
+
+---
+
+Q13 FOLLOW-UP
+Now what about volatile? Is that the same thing?
+
+---
+
+Q14
+Okay here's a scenario. You have two threads and two locks. Thread A holds lock one and is waiting for lock two. Thread B holds lock two and is waiting for lock one. What is this situation called and how would you prevent it?
+
+---
+
+Q15
+So like, checked versus unchecked exceptions, I always mix them up honestly, can you explain which is which and when you'd use each?
+
+---
+
+Q16
+Lambda expressions <break time="2.0s"/> hmm <break time="1.0s"/> what are they exactly and why did Java 8 add them?
+
+---
+
+Q17
+Stream API. So let's say I have a list of User objects and I want to filter users older than 25 and collect just their names into a new list. How would you write that?
+
+---
+
+Q18
+Optional class. Some people on my team say it's overused and just adds noise. What is it, and do you actually use it in production code?
+
+---
+
+Q19
+Dependency injection. What is it, why is it useful, and what's the difference between constructor injection and setter injection?
+
+---
+
+Q20
+Last one. Singleton pattern. How would you implement it?
+
+---
+
+Q20 FOLLOW-UP
+What are the gotchas? Specifically in a multi-threaded environment?
+
+---
+
+Q20 OPTIONAL FOLLOW-UP
+What about using enum for singleton?
+
+==========================================
+END - Total: 20 questions + follow-ups
+==========================================

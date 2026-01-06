@@ -1,0 +1,218 @@
+{
+  "datastructures": {
+    "question": "What are data structures?",
+    "answer": "Data structures are ways to organize and store data for efficient access and modification. The choice of data structure directly impacts your algorithm's performance.\n\nThe main categories: Arrays give O(1) access by index but fixed size. Linked lists allow O(1) insertion but O(n) access. Hash tables provide O(1) average for lookups using hashing. Trees like BST give O(log n) operations when balanced. Graphs model relationships between nodes.\n\nWhen choosing, consider your access patterns - do you need fast lookups, frequent insertions, or ordered traversal? That determines which structure fits best."
+  },
+  "hashMap": {
+    "question": "What is HashMap?",
+    "answer": "HashMap stores key-value pairs and gives you O(1) lookups using hashing. When you put a key, it gets hashed to find the bucket index. If two keys hash to the same bucket - that's a collision - Java handles it with linked lists, or converts to a tree if the chain gets too long.\n\nThe default load factor is 0.75, so it resizes when 75% full. Important to remember: it's not thread-safe, so use `ConcurrentHashMap` for multithreaded code. Also allows one null key and multiple null values."
+  },
+  "hashSet": {
+    "question": "What is HashSet?",
+    "answer": "HashSet is basically a HashMap behind the scenes - it stores your elements as keys with a dummy value. So you get O(1) for add, remove, and contains operations.\n\nThe key thing is it doesn't allow duplicates - it uses `equals()` and `hashCode()` to check. No ordering guarantee, and it allows one null element. Not thread-safe like most Java collections."
+  },
+  "arrayList": {
+    "question": "What is ArrayList?",
+    "answer": "ArrayList is a dynamic array - it grows automatically when you add elements. You get O(1) random access by index, which is its main advantage.\n\nThe tradeoff is insertion or deletion in the middle is O(n) because it has to shift elements. When it runs out of space, it grows by about 50%. For read-heavy workloads, ArrayList beats LinkedList. Just remember it's not thread-safe."
+  },
+  "linkedList": {
+    "question": "What is LinkedList?",
+    "answer": "LinkedList is a doubly-linked list, so each node points to both previous and next elements. This gives you O(1) insertion and deletion at the head or tail.\n\nThe downside is random access is O(n) - you have to traverse from the start. It uses more memory per element because of those pointers. In Java, it also implements Deque, so you can use it as a queue or stack."
+  },
+  "collections": {
+    "question": "What are Java Collections?",
+    "answer": "The Collections Framework is Java's set of interfaces and classes for storing groups of objects. The main interfaces are List for ordered elements with duplicates, Set for unique elements, Map for key-value pairs, and Queue for FIFO ordering.\n\nCommon implementations: ArrayList and LinkedList for List, HashSet and TreeSet for Set, HashMap and TreeMap for Map. The `Collections` utility class gives you methods like `sort()`, `reverse()`, and synchronized wrappers."
+  },
+  "threads": {
+    "question": "What are threads in Java?",
+    "answer": "A thread is the smallest unit of execution. Java supports multithreading natively, so you can run multiple threads in parallel within a single process.\n\nYou can create threads by extending Thread and overriding `run()`, or better - implementing Runnable. Best practice is using ExecutorService though, it manages the thread pool for you. Threads go through states: NEW, RUNNABLE, BLOCKED, WAITING, and TERMINATED."
+  },
+  "synchronized": {
+    "question": "What is synchronized in Java?",
+    "answer": "The `synchronized` keyword provides mutual exclusion - only one thread can execute that block or method at a time. On a method, it locks on `this` for instance methods, or the Class object for static methods.\n\nIt prevents race conditions and guarantees visibility across threads. The risk is deadlock if you're not careful with lock ordering. For more control, consider `ReentrantLock` which offers features like `tryLock()` and fairness policies."
+  },
+  "volatile": {
+    "question": "What is volatile in Java?",
+    "answer": "The `volatile` keyword ensures visibility - when one thread writes to a volatile variable, other threads immediately see the new value. It goes directly to main memory, bypassing CPU caches.\n\nBut here's the catch: volatile doesn't guarantee atomicity. So `i++` on a volatile int is still not thread-safe - you'd need `AtomicInteger` for that. Use volatile for simple flags or status variables that multiple threads read."
+  },
+  "deadlock": {
+    "question": "What is deadlock?",
+    "answer": "Deadlock happens when two or more threads are blocked forever, each waiting for a lock the other holds. Classic example: Thread A holds Lock 1 and waits for Lock 2, while Thread B holds Lock 2 and waits for Lock 1.\n\nFour conditions must all be true for deadlock: mutual exclusion, hold and wait, no preemption, and circular wait. To prevent it: always acquire locks in the same order, use timeouts with `tryLock()`, or avoid nested locks when possible."
+  },
+  "garbageCollection": {
+    "question": "What is Garbage Collection?",
+    "answer": "GC automatically frees memory from objects that are no longer reachable. Java uses generational GC - the heap is divided into Young Generation for new objects and Old Generation for long-lived ones.\n\nMost objects die young, so Minor GC on the Young Gen is fast and frequent. Major GC on Old Gen is slower. G1 is the default since Java 9, good for low latency. For huge heaps with strict latency needs, there's ZGC and Shenandoah. You can tune with flags like `-Xms`, `-Xmx`."
+  },
+  "jvm": {
+    "question": "What is JVM?",
+    "answer": "The JVM - Java Virtual Machine - executes Java bytecode, which is what makes Java platform independent. You write once, run anywhere.\n\nIt has three main parts: the Class Loader loads your .class files, Runtime Data Areas include the Heap and Stack, and the Execution Engine runs your code. The JIT compiler is key - it identifies hot code paths and compiles them to native machine code for better performance.\n\nQuick distinction: JVM runs bytecode, JRE is JVM plus libraries to run Java, JDK adds the compiler and tools to develop Java."
+  },
+  "oop": {
+    "question": "What is OOP?",
+    "answer": "Object-Oriented Programming organizes code around objects that bundle data and behavior together. It's built on four pillars:\n\nEncapsulation hides internal state and exposes it through methods. Inheritance lets you reuse code through parent-child relationships. Polymorphism means the same interface can have different implementations. Abstraction hides complexity and shows only what's essential.\n\nThe benefits are modularity, reusability, and maintainability."
+  },
+  "inheritance": {
+    "question": "What is inheritance?",
+    "answer": "Inheritance lets a class inherit fields and methods from a parent class - it's the 'is-a' relationship. In Java, you can only extend one class, but implement multiple interfaces.\n\nUse `super` to call the parent constructor or methods. Override methods for polymorphism. One thing to keep in mind: favor composition over inheritance when you can - it's more flexible and leads to looser coupling."
+  },
+  "polymorphism": {
+    "question": "What is polymorphism?",
+    "answer": "Polymorphism means 'many forms' - same interface, different implementations. There are two types:\n\nCompile-time polymorphism is method overloading - same method name, different parameters. Runtime polymorphism is method overriding - the subclass provides its own implementation.\n\nClassic example: `Animal a = new Dog()`. The reference type is Animal, but `a.speak()` calls Dog's implementation. This enables loose coupling and extensibility."
+  },
+  "abstraction": {
+    "question": "What is abstraction?",
+    "answer": "Abstraction means hiding implementation details and showing only the essential features. You achieve it through abstract classes and interfaces.\n\nAbstract classes can have partial implementation and state - use them for 'is-a' relationships with shared code. Interfaces define a pure contract - use them for 'can-do' capabilities. Since Java 8, interfaces can have default methods too.\n\nReal example: the List interface abstracts away whether you're using ArrayList or LinkedList."
+  },
+  "encapsulation": {
+    "question": "What is encapsulation?",
+    "answer": "Encapsulation bundles data and methods together while hiding internal state. You implement it with private fields and public getters/setters.\n\nThe access modifiers in order: private is class only, default is package, protected adds subclasses, public is everywhere.\n\nThe benefit is you can validate in setters, change internal implementation without breaking clients, and protect data integrity. When possible, make objects immutable - it's even safer."
+  },
+  "interface": {
+    "question": "What is an interface?",
+    "answer": "An interface defines a contract - what methods a class must implement. All methods are implicitly public abstract unless they're default or static.\n\nSince Java 8, you can add default methods with implementation, and static utility methods. Java 9 added private methods too. A class can implement multiple interfaces, which is how Java works around single inheritance.\n\nUse interfaces to define APIs, enable polymorphism, and for dependency injection - program to interfaces, not implementations."
+  },
+  "abstractClass": {
+    "question": "What is an abstract class?",
+    "answer": "An abstract class can't be instantiated directly - it's meant to be extended. It can have both abstract methods that subclasses must implement, and concrete methods with actual code.\n\nUnlike interfaces, abstract classes can have constructors, instance fields, and any access modifier. Use abstract class when you have an 'is-a' relationship with shared state and code. Use interface for 'can-do' capabilities.\n\nExample: Animal is abstract, Dog and Cat are concrete subclasses."
+  },
+  "exceptions": {
+    "question": "What are exceptions in Java?",
+    "answer": "Exceptions are events that disrupt normal program flow. The hierarchy starts with Throwable, which splits into Error for serious issues you shouldn't catch, and Exception for things you can handle.\n\nExceptions divide into checked and unchecked. Checked exceptions like IOException must be caught or declared - the compiler enforces it. Unchecked exceptions like NullPointerException are typically programming errors.\n\nBest practices: catch specific exceptions, don't swallow them silently, and use try-with-resources for anything AutoCloseable."
+  },
+  "lambda": {
+    "question": "What are lambda expressions?",
+    "answer": "Lambdas are anonymous functions introduced in Java 8. The syntax is parameters, arrow, then expression or block: `(a, b) -> a + b`.\n\nThey only work with functional interfaces - interfaces with exactly one abstract method. Common ones are `Function`, `Predicate`, `Consumer`, and `Supplier` in java.util.function.\n\nLambdas can access variables from the enclosing scope, but those variables must be effectively final. They're essential for Stream operations and cleaner callbacks."
+  },
+  "streamApi": {
+    "question": "What is Stream API?",
+    "answer": "Stream API, added in Java 8, lets you process collections in a functional style. You create a pipeline: source, intermediate operations, then a terminal operation.\n\nIntermediate operations like `filter()`, `map()`, and `sorted()` are lazy - they don't execute until you call a terminal operation like `collect()`, `forEach()`, or `reduce()`.\n\nExample: `list.stream().filter(x -> x > 0).map(x -> x * 2).collect(Collectors.toList())`\n\nFor parallel processing, just use `parallelStream()`. Key thing: streams are consumed once and don't modify the source."
+  },
+  "optional": {
+    "question": "What is Optional?",
+    "answer": "Optional is a container that may or may not hold a value - it's Java's way to avoid null and NullPointerException. Create with `Optional.of()` for non-null, `Optional.ofNullable()` if it might be null, or `Optional.empty()`.\n\nUseful methods: `orElse()` for default value, `orElseThrow()` to throw if empty, `ifPresent()` to act only if present, and `map()` to transform.\n\nImportant: don't use Optional for fields, method parameters, or collections - it's meant for return types where absence is valid."
+  },
+  "functionalInterface": {
+    "question": "What is a functional interface?",
+    "answer": "A functional interface has exactly one abstract method, which makes it usable with lambdas. The `@FunctionalInterface` annotation is optional but helps catch mistakes.\n\nJava provides built-in ones in java.util.function: `Function<T,R>` takes T returns R, `Predicate<T>` returns boolean, `Consumer<T>` takes T returns nothing, `Supplier<T>` takes nothing returns T.\n\nYou can define your own: any interface with one abstract method works as a lambda target."
+  },
+  "solid": {
+    "question": "What is SOLID?",
+    "answer": "SOLID is five design principles for maintainable object-oriented code:\n\nSingle Responsibility - a class should have one reason to change. Open/Closed - open for extension, closed for modification. Liskov Substitution - subtypes must be substitutable for their base types. Interface Segregation - prefer many specific interfaces over one general one. Dependency Inversion - depend on abstractions, not concrete implementations.\n\nFollowing these leads to loose coupling and high cohesion."
+  },
+  "singleton": {
+    "question": "What is Singleton pattern?",
+    "answer": "Singleton ensures only one instance of a class exists globally. The simplest thread-safe way in Java is using an enum:\n\n```java\npublic enum Singleton {\n    INSTANCE;\n    public void doSomething() { }\n}\n```\n\nOther approaches: eager initialization with static final, lazy with synchronized method, or Bill Pugh using inner static class. Use singletons sparingly though - they're global state, hard to test, and hide dependencies."
+  },
+  "factory": {
+    "question": "What is Factory pattern?",
+    "answer": "Factory pattern creates objects without exposing the instantiation logic. Instead of calling `new` directly, you ask a factory method.\n\nSimple Factory uses a static method that returns different types based on input. Factory Method lets subclasses decide which class to instantiate. Abstract Factory creates families of related objects.\n\nBenefits: encapsulates creation logic, enables loose coupling, and follows Single Responsibility since creation is separated from use."
+  },
+  "builder": {
+    "question": "What is Builder pattern?",
+    "answer": "Builder lets you construct complex objects step by step with a fluent API:\n\n```java\nPerson p = Person.builder()\n    .name(\"John\")\n    .age(30)\n    .build();\n```\n\nUse it when you have many constructor parameters, optional parameters, or want immutable objects. It's more readable than telescoping constructors and you can validate before building. Lombok's `@Builder` generates this automatically."
+  },
+  "observer": {
+    "question": "What is Observer pattern?",
+    "answer": "Observer sets up a one-to-many dependency - when the subject changes state, all registered observers get notified automatically.\n\nThe subject maintains a list of observers and calls their update method when something changes. Think event listeners, MVC where the Model notifies Views, or publish-subscribe systems.\n\nJava's built-in Observable is deprecated now. Use PropertyChangeListener or reactive libraries like RxJava for modern implementations."
+  },
+  "strategy": {
+    "question": "What is Strategy pattern?",
+    "answer": "Strategy defines a family of algorithms and makes them interchangeable at runtime. Instead of if-else chains to pick behavior, you inject a strategy object.\n\n```java\ninterface PaymentStrategy { void pay(int amount); }\ncheckout.setStrategy(new PayPal());\ncheckout.pay(100);\n```\n\nBenefits: eliminates conditionals, easy to add new strategies without changing existing code, and you can switch algorithms at runtime. Common examples: sorting algorithms, validation rules, pricing strategies."
+  },
+  "dependencyInjection": {
+    "question": "What is Dependency Injection?",
+    "answer": "DI means passing dependencies in from outside rather than creating them internally. Instead of `new Repository()` inside your service, you receive the repository through the constructor.\n\nConstructor injection is preferred - it makes dependencies explicit and enables immutability. Setter injection works for optional dependencies. Avoid field injection with annotations - it's harder to test.\n\nThe big benefit is testability - you can inject mocks easily. Frameworks like Spring handle the wiring automatically."
+  },
+  "bigO": {
+    "question": "What is Big O notation?",
+    "answer": "Big O describes how an algorithm's performance scales as input grows. You focus on the dominant term and drop constants.\n\nFrom best to worst: O(1) constant - hash lookups, O(log n) - binary search, O(n) - simple loop, O(n log n) - efficient sorts like merge sort, O(n²) - nested loops, O(2^n) - exponential like naive recursion.\n\nAlways analyze worst case. Space complexity uses the same notation for memory. In interviews, mention both time and space."
+  },
+  "binarySearch": {
+    "question": "What is binary search?",
+    "answer": "Binary search finds an element in a sorted array by repeatedly halving the search space. It's O(log n) time, O(1) space.\n\nYou maintain left and right pointers. Calculate mid, compare with target. If target is larger, search right half; if smaller, search left half. Key detail: calculate mid as `left + (right - left) / 2` to avoid integer overflow.\n\nRequirement: the array must be sorted. Common variants include finding first or last occurrence, or searching a rotated sorted array."
+  },
+  "recursion": {
+    "question": "What is recursion?",
+    "answer": "Recursion is when a function calls itself to solve smaller subproblems. Every recursive function needs a base case to stop, and a recursive case that makes progress toward the base.\n\n```java\nint factorial(int n) {\n    if (n <= 1) return 1;  // base case\n    return n * factorial(n - 1);  // recursive\n}\n```\n\nIt's elegant for trees and divide-and-conquer problems. The risk is stack overflow with deep recursion. You can often convert to iteration with an explicit stack."
+  },
+  "dynamicProgramming": {
+    "question": "What is dynamic programming?",
+    "answer": "DP solves problems by breaking them into overlapping subproblems and storing results to avoid recomputation. It works when you have optimal substructure and overlapping subproblems.\n\nTwo approaches: top-down with memoization adds caching to recursion, bottom-up with tabulation builds the solution iteratively from smaller subproblems.\n\nClassic example is Fibonacci - naive recursion is O(2^n), but with DP it's O(n). Other common problems: knapsack, longest common subsequence, coin change."
+  },
+  "closure": {
+    "question": "What is a closure?",
+    "answer": "A closure is a function that captures and remembers variables from its surrounding scope, even after that scope has finished executing.\n\n```javascript\nfunction outer() {\n    let count = 0;\n    return function() { return ++count; };\n}\nconst counter = outer();\ncounter(); // 1\ncounter(); // 2\n```\n\nThe inner function 'closes over' the count variable. Use cases include data privacy, function factories, and maintaining state in callbacks. In Java, lambdas can capture effectively final variables - similar concept."
+  },
+  "hoisting": {
+    "question": "What is hoisting?",
+    "answer": "Hoisting is JavaScript moving declarations to the top of their scope during compilation. Variables declared with `var` are hoisted and initialized to undefined, so you can reference them before the declaration line without an error.\n\n`let` and `const` are hoisted too, but stay in a 'temporal dead zone' until the declaration - accessing them earlier throws ReferenceError. Function declarations are fully hoisted, so you can call them before they appear in code.\n\nBest practice: declare variables at the top and use `let`/`const` instead of `var`."
+  },
+  "eventLoop": {
+    "question": "What is the event loop?",
+    "answer": "The event loop is how JavaScript handles async operations despite being single-threaded. It continuously checks if the call stack is empty, then processes queued callbacks.\n\nThe order matters: first all synchronous code runs, then all microtasks like Promise callbacks, then one macrotask like setTimeout. This cycle repeats.\n\n```javascript\nconsole.log('1');  // sync\nsetTimeout(() => console.log('2'), 0);  // macrotask\nPromise.resolve().then(() => console.log('3'));  // microtask\nconsole.log('4');\n// Output: 1, 4, 3, 2\n```"
+  },
+  "promises": {
+    "question": "What are Promises?",
+    "answer": "A Promise represents a value that might not be available yet - it's JavaScript's way to handle async operations. It starts pending, then settles to either fulfilled with a value or rejected with an error.\n\nChain with `.then()` for success, `.catch()` for errors, `.finally()` for cleanup. For combining promises: `Promise.all()` waits for all and fails fast, `Promise.allSettled()` waits for all regardless of outcome, `Promise.race()` returns first to settle, `Promise.any()` returns first to succeed."
+  },
+  "asyncAwait": {
+    "question": "What is async/await?",
+    "answer": "Async/await is syntactic sugar over Promises that makes async code look synchronous. An `async` function always returns a Promise. Inside it, `await` pauses execution until the Promise resolves.\n\n```javascript\nasync function fetchData() {\n    try {\n        const response = await fetch(url);\n        return await response.json();\n    } catch (error) {\n        console.error(error);\n    }\n}\n```\n\nUse try/catch for error handling. For parallel operations, use `await Promise.all([p1, p2])` instead of awaiting sequentially."
+  },
+  "reactHooks": {
+    "question": "What are React Hooks?",
+    "answer": "Hooks let you use state and lifecycle features in functional components - added in React 16.8. The main ones: `useState` for local state, `useEffect` for side effects like data fetching, `useContext` to consume context, `useMemo` and `useCallback` for performance optimization.\n\nTwo rules: only call hooks at the top level, never inside loops or conditions, and only call them from React functions. You can create custom hooks to extract reusable stateful logic - just name them `useXxx`."
+  },
+  "useState": {
+    "question": "What is useState?",
+    "answer": "useState adds local state to functional components. It returns a pair: current value and a setter function.\n\n```javascript\nconst [count, setCount] = useState(0);\nsetCount(5);  // set directly\nsetCount(prev => prev + 1);  // update based on previous\n```\n\nThe initial value is only used on first render. When you call the setter, React re-renders the component. For objects, you need to spread to update since it doesn't merge like class setState. For expensive initial values, pass a function: `useState(() => computeInitial())`."
+  },
+  "useEffect": {
+    "question": "What is useEffect?",
+    "answer": "useEffect handles side effects in functional components - data fetching, subscriptions, DOM manipulation. It runs after render.\n\n```javascript\nuseEffect(() => {\n    const sub = subscribe();\n    return () => sub.unsubscribe();  // cleanup\n}, [dependency]);\n```\n\nThe dependency array controls when it runs: empty array means only on mount/unmount, with dependencies means when those change, omitted means every render which is usually wrong. The cleanup function runs before the next effect and on unmount."
+  },
+  "virtualDOM": {
+    "question": "What is Virtual DOM?",
+    "answer": "Virtual DOM is an in-memory representation of the real DOM. When state changes, React creates a new virtual DOM tree, compares it with the previous one through 'diffing', calculates the minimal set of changes needed, then batches those updates to the real DOM.\n\nThis is faster than direct DOM manipulation because DOM operations are expensive. React's reconciliation algorithm is smart, but you need to help it with list items - always provide stable keys, not array indices for dynamic lists."
+  },
+  "rest": {
+    "question": "What is REST?",
+    "answer": "REST is an architectural style for web APIs based on HTTP. Key principles: stateless requests, resource-based URLs, and standard HTTP methods.\n\nGET reads data and is idempotent. POST creates new resources. PUT replaces entirely and is idempotent. PATCH does partial updates. DELETE removes resources.\n\nStatus codes: 2xx for success, 4xx for client errors, 5xx for server errors. Best practices include using nouns in URLs, plural resource names, proper versioning, and meaningful error responses."
+  },
+  "sql": {
+    "question": "What is SQL?",
+    "answer": "SQL is the language for relational databases. The core operations: SELECT to read, INSERT to create, UPDATE to modify, DELETE to remove.\n\nJOINs combine tables: INNER for matching rows only, LEFT keeps all from left table, RIGHT keeps all from right. Indexes speed up queries using B-trees. Transactions give you ACID properties.\n\nNormalization reduces redundancy - 1NF eliminates repeating groups, 2NF removes partial dependencies, 3NF removes transitive dependencies. But sometimes you denormalize for read performance."
+  },
+  "nosql": {
+    "question": "What is NoSQL?",
+    "answer": "NoSQL databases store data in non-tabular formats, designed for scale and schema flexibility. Main types: document stores like MongoDB for JSON-like data, key-value stores like Redis for simple fast access, column-family like Cassandra for wide columns, and graph databases like Neo4j for relationships.\n\nCompared to SQL: NoSQL has flexible schema, scales horizontally easier, often trades ACID for eventual consistency. Choose NoSQL for massive scale, flexible schemas, or when your data model fits - like graphs or time-series."
+  },
+  "caching": {
+    "question": "What is caching?",
+    "answer": "Caching stores frequently accessed data in fast storage to avoid expensive operations. Layers include browser cache for static assets, CDN for geographic distribution, application cache like Redis, and database query cache.\n\nStrategies: cache-aside means your app manages the cache, read-through has the cache fetch from DB on miss, write-through updates both cache and DB together, write-behind queues DB writes asynchronously.\n\nEviction policies: LRU removes least recently used, LFU removes least frequently used, TTL expires after time. The hardest part is cache invalidation."
+  },
+  "microservices": {
+    "question": "What are microservices?",
+    "answer": "Microservices split your application into small, independent services. Each has single responsibility, its own database, deploys independently, and communicates via APIs or messaging.\n\nBenefits: scale services independently, use different tech stacks, teams can work autonomously, failures are isolated. Challenges: distributed system complexity, network latency, data consistency across services, harder debugging.\n\nCommon patterns: API Gateway as single entry point, service discovery with tools like Consul, circuit breakers for fault tolerance, saga pattern for distributed transactions. General advice: start with a monolith, extract microservices as needed."
+  },
+  "docker": {
+    "question": "What is Docker?",
+    "answer": "Docker packages applications into containers - lightweight, portable, isolated environments that include everything needed to run. Unlike VMs, containers share the host OS kernel, making them much lighter and faster to start.\n\nKey concepts: Image is the blueprint built from a Dockerfile, Container is a running instance, Registry like Docker Hub stores images, Volumes persist data, Networks connect containers.\n\nBasic workflow: write Dockerfile, `docker build` creates image, `docker run` starts container, `docker push` shares to registry."
+  },
+  "kubernetes": {
+    "question": "What is Kubernetes?",
+    "answer": "Kubernetes orchestrates containers across clusters of machines. Core objects: Pod is the smallest unit containing one or more containers, Deployment manages replicas and rolling updates, Service provides stable networking, ConfigMap and Secret handle configuration, Ingress routes external traffic.\n\nKey features: auto-scaling with HPA, self-healing restarts failed containers, load balancing, rolling updates and rollbacks, service discovery.\n\nArchitecture has a control plane with API server, scheduler, and controllers, plus worker nodes running kubelet and your pods."
+  },
+  "git": {
+    "question": "What is Git?",
+    "answer": "Git is a distributed version control system - every developer has the full history locally. Core concepts: repository contains your project and .git folder, commits are snapshots of changes, branches are independent lines of development, remotes are server copies like origin.\n\nEssential commands: `clone`/`init` to start, `add`/`commit`/`push`/`pull` for basic workflow, `branch`/`checkout`/`merge` for branching, `rebase` for linear history, `stash` for temporary saves.\n\nBest practices: meaningful commit messages, feature branches, pull request reviews before merging."
+  },
+  "testing": {
+    "question": "What is software testing?",
+    "answer": "Testing verifies software works correctly. The test pyramid from bottom to top: unit tests for individual functions - fast and many, integration tests for component interaction - medium amount, E2E tests for full user flows - slow and few.\n\nTypes include functional testing for features, non-functional for performance and security, regression to ensure existing features still work. Approaches: TDD writes tests first, BDD uses behavior specifications with Given/When/Then format.\n\nAim for meaningful coverage of critical paths, not just hitting a percentage number."
+  },
+  "tdd": {
+    "question": "What is TDD?",
+    "answer": "Test-Driven Development means writing tests before implementation code. The cycle is Red-Green-Refactor: first write a failing test, then write the minimum code to pass it, then improve the code while keeping tests green.\n\nBenefits: you end up with better design because you think about the interface first, tests serve as documentation, and you have confidence to refactor. The challenge is it's slower initially and has a learning curve, but it pays off in fewer bugs and maintainable code."
+  }
+}

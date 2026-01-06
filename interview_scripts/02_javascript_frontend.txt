@@ -1,0 +1,154 @@
+================================================================================
+INTERVIEW SCRIPT #02: JavaScript / Frontend Developer
+================================================================================
+Duration: ~15-20 minutes
+Difficulty: Mid-Senior
+Focus: JS Core, Async, React, TypeScript, DOM
+
+EDGE CASES TESTED:
+- Technical term mispronunciation
+- Rapid-fire questions
+- Skeptical/challenging tone
+- Code dictation
+- Acronym heavy questions
+- Correcting yourself
+- Overlapping topics
+
+INSTRUCTIONS:
+- [PAUSE Xs] = pause for X seconds
+- [FOLLOW-UP] = ask after candidate answers
+- [INTERRUPT] = cut off candidate
+- [MISPRONOUNCE] = say technical term wrong
+- [RAPID] = quick succession, no pause between
+- [DICTATE] = speak code out loud
+- [CORRECT] = correct yourself mid-sentence
+
+================================================================================
+
+Q1 [BASELINE - CLEAN]
+"Alright, let's start. Can you explain what closures are in JavaScript?"
+
+---
+
+Q2 [MISPRONOUNCE - COMMON WHISPER ERROR]
+"What about [MISPRONOUNCE: say 'hoisting' as 'hosting'] - I mean hoisting - how does that work with var, let, and const?"
+
+---
+
+Q3 [FOLLOW-UP CHAIN]
+"Explain the event loop to me"
+
+[FOLLOW-UP 1]: "Where do promises go? Microtask or macrotask queue?"
+
+[FOLLOW-UP 2]: "What runs first, setTimeout with 0 delay or a resolved promise?"
+
+---
+
+Q4 [RAPID FIRE - THREE QUICK QUESTIONS]
+"Promise states - what are they? [RAPID] How do you handle errors? [RAPID] What's Promise.all versus Promise.race?"
+
+---
+
+Q5 [PAUSE - FORMULATING QUESTION]
+"Async await... [PAUSE 3s] ...is it just syntax sugar or is there more to it? What happens under the hood?"
+
+---
+
+Q6 [CORRECT YOURSELF]
+"The 'this' keyword - how does it work in arrow functions versus... [CORRECT] sorry, versus regular functions?"
+
+---
+
+Q7 [DICTATE CODE]
+"If I write: [DICTATE] const obj equals curly brace, name colon quote John quote, greet colon function parentheses curly brace console dot log this dot name... what gets logged when I call obj dot greet?"
+
+---
+
+Q8 [SKEPTICAL - CHALLENGE PREMISE]
+"Prototypes and prototypal inheritance. [SKEPTICAL] Do people actually still use this or is it all classes now? Explain how it works."
+
+---
+
+Q9 [MUMBLE + RESTART]
+"React hooks... um... [MUMBLE] ...actually, specifically useState and useEffect. What are the rules of hooks?"
+
+---
+
+Q10 [INTERRUPT WITH CLARIFICATION]
+"How does virtual DOM work—"
+
+[INTERRUPT]:
+"—and I mean specifically the reconciliation process, the diffing algorithm"
+
+---
+
+Q11 [TWO-PART - COMPARE]
+"useEffect. When does it run? And how is it different from useLayoutEffect?"
+
+---
+
+Q12 [SCENARIO - DEBUGGING]
+"You have a useEffect that's running infinitely, re-rendering over and over. What's probably wrong and how do you fix it?"
+
+---
+
+Q13 [LONG PAUSE - THINKING OF EXAMPLE]
+"TypeScript generics... [PAUSE 4s] ...give me an example of when you'd use them. Maybe a generic function?"
+
+---
+
+Q14 [FAST + ACRONYM HEAVY]
+"What's-the-difference-between-any-unknown-and-never-types-in-TS?"
+
+---
+
+Q15 [CONVERSATIONAL - OPINION]
+"Type versus interface in TypeScript. Which do you prefer and why? Is there actually a difference?"
+
+---
+
+Q16 [BACKGROUND NOISE + REPEAT]
+"[BACKGROUND: cough] Sorry. Event delegation - [BACKGROUND: paper shuffle] - what is it and why would you use it?"
+
+---
+
+Q17 [FOLLOW-UP - GO DEEPER]
+"Explain debounce and throttle"
+
+[FOLLOW-UP]: "Can you walk me through how you'd implement debounce from scratch?"
+
+---
+
+Q18 [COMPOUND - MULTIPLE CONCEPTS]
+"ES6 modules. Import, export, default export, named export. What's the difference and how does tree shaking relate to this?"
+
+---
+
+Q19 [SKEPTICAL + FOLLOW-UP]
+"Server-side rendering. [SKEPTICAL] Is SSR actually worth the complexity? What problems does it solve?"
+
+[FOLLOW-UP]: "What about hydration? What is that?"
+
+---
+
+Q20 [FINAL - OPEN ENDED]
+"Last question. You're building a new React app from scratch. Walk me through your setup - tooling, state management, folder structure, whatever you'd actually do."
+
+[OPTIONAL PROBE]: "Why that state management solution over others?"
+
+================================================================================
+END OF INTERVIEW
+================================================================================
+
+EXPECTED EDGE CASE RESULTS:
+- Q2: Should handle mispronunciation, map "hosting" to "hoisting"
+- Q3: Event loop follow-ups should stay in same topic
+- Q4: Should handle rapid-fire, might split into multiple segments
+- Q6: Self-correction should use final version
+- Q7: Code dictation - challenging for STT
+- Q9: Should ignore mumble, get to actual question
+- Q10: Interruption adds context, should combine
+- Q12: Scenario-based, should detect useEffect/React hooks topic
+- Q14: Fast speech with acronyms - STT challenge
+- Q16: Background noise should be filtered
+- Q17: Follow-up "implement from scratch" is same topic

@@ -1,0 +1,152 @@
+================================================================================
+INTERVIEW SCRIPT #03: System Design
+================================================================================
+Duration: ~20-25 minutes
+Difficulty: Senior / Staff
+Focus: Scalability, Databases, Caching, Microservices, Trade-offs
+
+EDGE CASES TESTED:
+- Very long questions (context heavy)
+- Numbers and scale mentioned
+- Probing follow-ups
+- "What if" scenarios
+- Pushing back on answers
+- Multiple valid approaches
+- Thinking out loud encouraged
+
+INSTRUCTIONS:
+- [PAUSE Xs] = pause for X seconds
+- [FOLLOW-UP] = ask after candidate answers
+- [PUSH BACK] = challenge their answer
+- [WHAT IF] = change constraints
+- [PROBE] = ask them to go deeper
+- [NUMBERS] = mention specific scale/metrics
+- [LONG] = extended question with context
+
+================================================================================
+
+Q1 [BASELINE - OPEN ENDED]
+"Let's start broad. How would you design a URL shortener like bit.ly?"
+
+[PROBE]: "What's your database schema?"
+
+[FOLLOW-UP]: "How do you generate the short code?"
+
+---
+
+Q2 [NUMBERS - SCALE CONTEXT]
+"Let's say we have [NUMBERS] 100 million URLs, 10,000 requests per second. How does your design change?"
+
+---
+
+Q3 [PUSH BACK - CHALLENGE]
+"You mentioned using a relational database. [PUSH BACK] Why not NoSQL? What's the trade-off there?"
+
+---
+
+Q4 [TOPIC SWITCH - CACHING]
+"Caching. Where would you add caching in this system and what caching strategy would you use?"
+
+[FOLLOW-UP]: "LRU versus LFU - when would you pick one over the other?"
+
+---
+
+Q5 [WHAT IF - CHANGE CONSTRAINTS]
+"[WHAT IF] What if we need analytics too - tracking how many times each link was clicked, from what country, what device?"
+
+---
+
+Q6 [NEW PROBLEM - LONG CONTEXT]
+"[LONG] New problem. Design Twitter's home timeline. Users follow other users, they post tweets, and when you open the app you see tweets from people you follow sorted by time. How would you build this?"
+
+---
+
+Q7 [PROBE - GO DEEPER]
+"You mentioned fan-out. [PROBE] Explain fan-out-on-write versus fan-out-on-read. Which would you choose and why?"
+
+---
+
+Q8 [NUMBERS - CELEBRITY PROBLEM]
+"[NUMBERS] What if a user has 10 million followers and they tweet? How do you handle that? The celebrity problem."
+
+---
+
+Q9 [PAUSE - THINKING]
+"Database sharding... [PAUSE 3s] ...how would you shard the tweets table? What's your sharding key?"
+
+---
+
+Q10 [PUSH BACK]
+"You said shard by user ID. [PUSH BACK] But what about hot spots? What if one user is way more active than others?"
+
+---
+
+Q11 [TOPIC SWITCH - CONSISTENCY]
+"CAP theorem. Where does your Twitter design fall? Is it CP or AP? Why?"
+
+[FOLLOW-UP]: "Is eventual consistency okay here? What could go wrong?"
+
+---
+
+Q12 [NEW PROBLEM - REAL-TIME]
+"New problem. Design a real-time chat system like WhatsApp or Slack. Focus on message delivery."
+
+---
+
+Q13 [PROBE - PROTOCOLS]
+"[PROBE] WebSockets versus long polling versus Server-Sent Events. Walk me through the trade-offs."
+
+---
+
+Q14 [WHAT IF - OFFLINE]
+"[WHAT IF] What happens when a user is offline? How do you guarantee message delivery when they come back online?"
+
+---
+
+Q15 [COMPOUND QUESTION]
+"Message ordering and delivery guarantees. How do you ensure messages arrive in order? What about exactly-once delivery - is that even possible?"
+
+---
+
+Q16 [SKEPTICAL]
+"[SKEPTICAL] You mentioned using Kafka. Isn't that overkill for a chat app? Why not just use a simple message queue?"
+
+---
+
+Q17 [NEW PROBLEM - RATE LIMITING]
+"Different topic. Design a rate limiter. How would you implement rate limiting for an API?"
+
+[FOLLOW-UP]: "Token bucket versus sliding window - explain both"
+
+---
+
+Q18 [DISTRIBUTED CONTEXT]
+"[WHAT IF] Now make it distributed. Multiple API servers behind a load balancer. How does your rate limiter work across all of them?"
+
+---
+
+Q19 [TRADE-OFFS]
+"Redis for rate limiting - [PROBE] what happens if Redis goes down? What's your fallback strategy?"
+
+---
+
+Q20 [FINAL - META QUESTION]
+"Last one. When you're doing system design in general, how do you decide between building something yourself versus using a managed service? What's your decision framework?"
+
+[OPTIONAL]: "Give me an example where you made that trade-off"
+
+================================================================================
+END OF INTERVIEW
+================================================================================
+
+EXPECTED EDGE CASE RESULTS:
+- Q1-Q5: URL shortener deep dive - should track as one topic context
+- Q2: Numbers in speech might be challenging for STT
+- Q3: Push back should still be "caching" or "database" topic
+- Q6: Long question - VAD might trigger too early
+- Q7: "fan-out" is technical term - STT accuracy test
+- Q8: "celebrity problem" - should map to system design topic
+- Q11: "CAP theorem" - specific term recognition
+- Q12-Q16: Chat system - new topic, should reset context
+- Q17-Q19: Rate limiter - another topic switch
+- Q20: Meta question - might be "unknown" topic, that's okay

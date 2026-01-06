@@ -1,0 +1,3 @@
+Error: 2 unexpected arguments: '', ''
+Usage: notarytool global-options app-store-connect-options app-specific-password-options keychain-options credential-options output-options notification-options wait-options submit [<options>] <file-path>
+  See 'notarytool global-options app-store-connect-options app-specific-password-options keychain-options credential-options output-options notification-options wait-options submit --help' for more information.

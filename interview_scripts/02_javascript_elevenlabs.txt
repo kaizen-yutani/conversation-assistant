@@ -1,0 +1,137 @@
+JAVASCRIPT FRONTEND INTERVIEW - ELEVENLABS READY
+=================================================
+Copy each question block into ElevenLabs. Generate separately for different voice styles.
+
+Voice recommendation: "Adam" or "Rachel" (mix for multi-speaker)
+Settings: Stability 0.5, Clarity 0.75
+
+PAUSE SYNTAX: <break time="Xs"/> (max 3 seconds, self-closing only)
+
+---
+
+Q1
+Alright, let's start. Can you explain what closures are in JavaScript?
+
+---
+
+Q2
+What about hosting <break time="0.5s"/> I mean hoisting <break time="0.5s"/> how does that work with var, let, and const?
+
+---
+
+Q3
+Explain the event loop to me.
+
+---
+
+Q3 FOLLOW-UP 1
+Where do promises go? Microtask or macrotask queue?
+
+---
+
+Q3 FOLLOW-UP 2
+What runs first, setTimeout with zero delay or a resolved promise?
+
+---
+
+Q4 (generate with Stability: 0.3 for rapid fire)
+Promise states, what are they? How do you handle errors? What's Promise.all versus Promise.race?
+
+---
+
+Q5
+Async await <break time="3.0s"/> is it just syntax sugar or is there more to it? What happens under the hood?
+
+---
+
+Q6
+The this keyword, how does it work in arrow functions versus <break time="1.0s"/> sorry, versus regular functions?
+
+---
+
+Q7
+If I write: const obj equals curly brace, name colon quote John quote, greet colon function parentheses curly brace console dot log this dot name <break time="0.5s"/> what gets logged when I call obj dot greet?
+
+---
+
+Q8
+Prototypes and prototypal inheritance. Do people actually still use this or is it all classes now? Explain how it works.
+
+---
+
+Q9
+React hooks, um <break time="0.5s"/> actually, specifically useState and useEffect. What are the rules of hooks?
+
+---
+
+Q10
+How does virtual DOM work <break time="0.8s"/> and I mean specifically the reconciliation process, the diffing algorithm.
+
+---
+
+Q11
+useEffect. When does it run? And how is it different from useLayoutEffect?
+
+---
+
+Q12
+You have a useEffect that's running infinitely, re-rendering over and over. What's probably wrong and how do you fix it?
+
+---
+
+Q13
+TypeScript generics <break time="3.0s"/> give me an example of when you'd use them. Maybe a generic function?
+
+---
+
+Q14 (generate with Stability: 0.3 for fast speech)
+What's the difference between any, unknown, and never types in TypeScript?
+
+---
+
+Q15
+Type versus interface in TypeScript. Which do you prefer and why? Is there actually a difference?
+
+---
+
+Q16
+<break time="0.5s"/> Sorry. Event delegation <break time="0.5s"/> what is it and why would you use it?
+
+---
+
+Q17
+Explain debounce and throttle.
+
+---
+
+Q17 FOLLOW-UP
+Can you walk me through how you'd implement debounce from scratch?
+
+---
+
+Q18
+ES6 modules. Import, export, default export, named export. What's the difference and how does tree shaking relate to this?
+
+---
+
+Q19
+Server-side rendering. Is SSR actually worth the complexity? What problems does it solve?
+
+---
+
+Q19 FOLLOW-UP
+What about hydration? What is that?
+
+---
+
+Q20
+Last question. You're building a new React app from scratch. Walk me through your setup. Tooling, state management, folder structure, whatever you'd actually do.
+
+---
+
+Q20 OPTIONAL PROBE
+Why that state management solution over others?
+
+=================================================
+END - Total: 20 questions + follow-ups
+=================================================
