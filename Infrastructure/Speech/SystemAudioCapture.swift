@@ -41,7 +41,6 @@ class SystemAudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
     private var silenceThreshold: Float { currentBaseline + silenceMargin }
 
     func startCapturing() async throws {
-        NSLog("🔊 SystemAudio: Starting system audio capture")
 
         let content = try await SCShareableContent.current
 
@@ -71,14 +70,12 @@ class SystemAudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
         baselineBuffer = []
         currentBaseline = -60.0
 
-        NSLog("🔊 SystemAudio: Capture started")
         DispatchQueue.main.async {
             self.onStatusChange?("🔊 Listening to system audio...")
         }
     }
 
     func stopCapturing() async {
-        NSLog("🔊 SystemAudio: Stopping capture")
         isCapturing = false
         try? await stream?.stopCapture()
         stream = nil
@@ -91,11 +88,9 @@ class SystemAudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
     func stream(_ stream: SCStream, didOutputSampleBuffer sampleBuffer: CMSampleBuffer, of type: SCStreamOutputType) {
         guard type == .audio, isCapturing else { return }
 
-        // Log format once
+        // Get sample rate from format
         if !formatLogged, let formatDesc = CMSampleBufferGetFormatDescription(sampleBuffer) {
             if let asbd = CMAudioFormatDescriptionGetStreamBasicDescription(formatDesc)?.pointee {
-                NSLog("🔊 SysAudio FORMAT: sampleRate=%.0f, channels=%d, bitsPerChannel=%d, bytesPerFrame=%d, formatID=%d",
-                      asbd.mSampleRate, asbd.mChannelsPerFrame, asbd.mBitsPerChannel, asbd.mBytesPerFrame, asbd.mFormatID)
                 sampleRate = asbd.mSampleRate
             }
             formatLogged = true
@@ -183,13 +178,7 @@ class SystemAudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
     private func processVAD(db: Float) {
         let now = Date()
         checkCount += 1
-
         updateBaseline(db)
-
-        if checkCount % 100 == 0 {
-            NSLog("🔊 SysVAD[%d]: db=%.1f, baseline=%.1f, speaking=%@",
-                  checkCount, db, currentBaseline, isSpeaking ? "YES" : "NO")
-        }
 
         DispatchQueue.main.async {
             self.onLevelUpdate?(db, self.isSpeaking)
@@ -206,10 +195,8 @@ class SystemAudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
                 speechStartTime = now
                 peakLevel = db
                 recordedSamples = []
-
-                NSLog("🟢 SysAudio: Speech STARTED - db=%.1f", db)
                 DispatchQueue.main.async {
-                    self.onStatusChange?("🗣 Interviewer speaking...")
+                    self.onStatusChange?("🗣 Speaker detected...")
                 }
             }
         } else if isSpeaking {
@@ -220,11 +207,8 @@ class SystemAudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
                 let speechDuration = speechStartTime.map { now.timeIntervalSince($0) } ?? 0
                 let peakAboveBaseline = peakLevel - currentBaseline
 
-                NSLog("🔴 SysAudio: Speech ENDED - duration=%.2fs", speechDuration)
-
                 if speechDuration > minSpeechDuration && peakAboveBaseline >= speechMargin * 0.5 {
                     if let audioData = convertSamplesToM4A() {
-                        NSLog("✅ SysAudio: Processing %.2fs (%d bytes)", speechDuration, audioData.count)
                         DispatchQueue.main.async {
                             self.onStatusChange?("⏳ Processing...")
                             self.onSpeechSegment?(audioData)

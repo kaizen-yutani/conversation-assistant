@@ -7,38 +7,54 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-echo -e "${GREEN}🔨 Building Interview Master for Release${NC}"
+echo -e "${GREEN}🔨 Building Conversation Assistant for Release${NC}"
 
 # Configuration
 DEVELOPER_ID="Developer ID Application: Nikolay Prosenikov (2Q562K9C7N)"
-APP_NAME="InterviewMaster"
-BUNDLE_ID="com.nikolayprosenikov.interviewmaster"
+APP_NAME="ConversationAssistant"
+BUNDLE_ID="com.nikolayprosenikov.conversationassistant"
 VERSION="1.0.0"
 BUILD_DIR="build"
 APP_BUNDLE="${BUILD_DIR}/${APP_NAME}.app"
-ENTITLEMENTS="InterviewMaster.entitlements"
+ENTITLEMENTS="ConversationAssistant.entitlements"
 
 # Step 1: Build the Swift binary
 echo -e "\n${YELLOW}Step 1: Compiling Swift binary${NC}"
-swiftc interview_master.swift \
+swiftc conversation_assistant.swift \
     Domain/Entities/Screenshot.swift \
     Domain/ValueObjects/AnalysisMode.swift \
     Domain/ValueObjects/Tab.swift \
     Domain/Model/AppSettings.swift \
     Domain/Model/ConversationContext.swift \
-    Domain/Model/InterviewMessage.swift \
+    Domain/Model/ConversationMessage.swift \
+    Domain/Model/DataSourceConfig.swift \
     Domain/Model/ValueObjects/ScreenshotId.swift \
     Infrastructure/Capture/ScreenCaptureService.swift \
     Infrastructure/Capture/MacScreenCapture.swift \
     Infrastructure/API/AnthropicClient.swift \
     Infrastructure/API/OpenAIClient.swift \
     Infrastructure/Speech/VADAudioRecorder.swift \
-    Infrastructure/Speech/GroqInterviewClient.swift \
+    Infrastructure/Speech/SystemAudioCapture.swift \
+    Infrastructure/Speech/GroqSpeechClient.swift \
     Infrastructure/QADatabase.swift \
+    Infrastructure/Storage/ApiKeyManager.swift \
+    Infrastructure/Tools/ToolDefinitions.swift \
+    Infrastructure/Tools/ToolProtocol.swift \
+    Infrastructure/Tools/ToolExecutor.swift \
+    Infrastructure/Tools/Clients/ConfluenceClient.swift \
+    Infrastructure/Tools/Clients/JiraClient.swift \
+    Infrastructure/Tools/Clients/GitHubClient.swift \
+    Infrastructure/Tools/Clients/DatabaseClient.swift \
+    Infrastructure/Tools/Clients/WebSearchClient.swift \
+    Infrastructure/Auth/OAuthConfig.swift \
+    Infrastructure/Auth/OAuthManager.swift \
+    Presentation/Settings/SettingsWindowController.swift \
     Presentation/Styling/SyntaxHighlighter.swift \
     Presentation/Styling/MarkdownRenderer.swift \
     Presentation/Windows/ScreenshotAlertWindow.swift \
     Presentation/Windows/WindowFactory.swift \
+    Presentation/Onboarding/PermissionsOnboardingWindow.swift \
+    Presentation/Onboarding/AtlassianOnboardingWindow.swift \
     -o "${BUILD_DIR}/${APP_NAME}" \
     -O \
     -whole-module-optimization \
@@ -47,7 +63,8 @@ swiftc interview_master.swift \
     -framework Carbon \
     -framework ScreenCaptureKit \
     -framework AVFoundation \
-    -framework Speech
+    -framework Speech \
+    -framework Security
 
 # Step 2: Create app bundle structure
 echo -e "\n${YELLOW}Step 2: Creating app bundle${NC}"
@@ -80,9 +97,9 @@ cat > "${APP_BUNDLE}/Contents/Info.plist" << EOF
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>CFBundleName</key>
-    <string>Interview Master</string>
+    <string>Conversation Assistant</string>
     <key>CFBundleDisplayName</key>
-    <string>Interview Master</string>
+    <string>Conversation Assistant</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
@@ -96,6 +113,19 @@ cat > "${APP_BUNDLE}/Contents/Info.plist" << EOF
     <key>LSUIElement</key>
     <false/>
 
+    <!-- URL Scheme for OAuth callbacks -->
+    <key>CFBundleURLTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleURLName</key>
+            <string>com.nikolayprosenikov.conversationassistant</string>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>conversationassistant</string>
+            </array>
+        </dict>
+    </array>
+
     <!-- App Store Required -->
     <key>LSApplicationCategoryType</key>
     <string>public.app-category.developer-tools</string>
@@ -104,7 +134,7 @@ cat > "${APP_BUNDLE}/Contents/Info.plist" << EOF
 
     <!-- Privacy Usage Descriptions (Required for App Store) -->
     <key>NSScreenCaptureUsageDescription</key>
-    <string>Interview Master needs screen recording permission to capture screenshots of coding problems for AI-powered analysis during technical interviews.</string>
+    <string>Conversation Assistant needs screen recording permission to capture screenshots for AI-powered analysis.</string>
 </dict>
 </plist>
 EOF

@@ -106,7 +106,7 @@ class ConversationContext {
             history.removeFirst()
         }
 
-        print("📝 [\(speaker.rawValue)] \(text.prefix(50))... | Topic: \(topic ?? "none")")
+        // Logging disabled
     }
 
     /// Get recent context for LLM (last 5 utterances)

@@ -1,5 +1,83 @@
 import Foundation
 
+// MARK: - Chat Message Types for Multi-Turn Conversations
+
+/// Represents a message in a multi-turn conversation
+struct ChatMessage {
+    enum Role: String {
+        case user
+        case assistant
+    }
+
+    let role: Role
+    let content: String
+
+    func toDictionary() -> [String: Any] {
+        return ["role": role.rawValue, "content": content]
+    }
+}
+
+/// Manages conversation history for multi-turn chats
+class ChatHistory {
+    private var messages: [ChatMessage] = []
+    private let maxMessages: Int
+
+    init(maxMessages: Int = 20) {
+        self.maxMessages = maxMessages
+    }
+
+    /// Add a user message
+    func addUser(_ content: String) {
+        messages.append(ChatMessage(role: .user, content: content))
+        trimIfNeeded()
+    }
+
+    /// Add an assistant message
+    func addAssistant(_ content: String) {
+        messages.append(ChatMessage(role: .assistant, content: content))
+        trimIfNeeded()
+    }
+
+    /// Get messages as array for API
+    func toAPIMessages() -> [[String: Any]] {
+        return messages.map { $0.toDictionary() }
+    }
+
+    /// Get messages with a new user query appended (doesn't modify history)
+    func toAPIMessagesWithQuery(_ query: String) -> [[String: Any]] {
+        var result = messages.map { $0.toDictionary() }
+        result.append(["role": "user", "content": query])
+        return result
+    }
+
+    /// Clear conversation
+    func clear() {
+        messages.removeAll()
+    }
+
+    /// Check if empty
+    var isEmpty: Bool {
+        return messages.isEmpty
+    }
+
+    /// Get message count
+    var count: Int {
+        return messages.count
+    }
+
+    private func trimIfNeeded() {
+        // Keep pairs (user + assistant) to maintain coherent context
+        while messages.count > maxMessages {
+            // Remove oldest pair
+            if messages.count >= 2 {
+                messages.removeFirst(2)
+            } else {
+                messages.removeFirst()
+            }
+        }
+    }
+}
+
 /// Infrastructure: Anthropic API Client
 /// Handles communication with Anthropic's Claude API
 class AnthropicClient {
@@ -132,18 +210,27 @@ class AnthropicClient {
 
     /// Static system prompt for classification (cached) - OPTIMIZED: topics come from settings
     private static let classificationSystemPrompt = """
-You help someone being interviewed. Classify their utterance, then answer if it's a question.
+You are a helpful assistant that answers questions by searching connected knowledge sources.
+Classify the user's utterance, then answer if it's a question or request.
 
 === CLASSIFY ===
 Output ONE line: STATUS:xxx|TOPIC:yyy
 
 STATUS:
-- question = asking about something (wants info)
-- incomplete = cut off mid-sentence
+- question = wants info OR requests action. Includes:
+  • Direct questions ("What tickets are left?")
+  • Implicit requests ("let's see what's in the sprint", "show me my tickets", "check the backlog")
+  • Action phrases ("let's see", "let's check", "what's left", "what do we have")
+- incomplete = genuinely cut off mid-word/mid-phrase, NOT just casual speech
 - answer = responding/explaining, confirmations, thanks
+
+IMPORTANT: Err on the side of "question" - if someone could want information, it's a question.
+"let's see if we have any tickets" → question (wants ticket info)
+"what's left for the sprint" → question (wants sprint status)
 
 === IF question, ADD ANSWER ===
 After STATUS line, output "---" then answer in 3-4 bullet points. Be direct, no fluff.
+When you need more information, indicate you would use available tools.
 """
 
     /// Get topics based on current tech stack setting
@@ -359,14 +446,38 @@ After STATUS line, output "---" then answer in 3-4 bullet points. Be direct, no 
     }
 
     /// Send a message with images and stream the response
+    /// - Parameters:
+    ///   - images: Base64-encoded images to analyze
+    ///   - prompt: The analysis prompt/instruction
+    ///   - conversationContext: Recent conversation history for context
+    ///   - userContext: Optional user-provided context for this specific analysis
+    ///   - onChunk: Callback for streaming text chunks
     func sendMessageStream(
         images: [String],
         prompt: String,
+        conversationContext: String? = nil,
+        userContext: String? = nil,
         onChunk: @escaping (String) -> Void
     ) async -> Result<Void, Error> {
 
+        // Build contextual prompt
+        var contextualPrompt = prompt
+
+        // Add user-specific context if provided
+        if let userCtx = userContext, !userCtx.isEmpty {
+            contextualPrompt += "\n\nUser's specific request: \(userCtx)"
+        }
+
         // Build request body
         var contentBlocks: [[String: Any]] = []
+
+        // Add conversation context as text first (if available)
+        if let context = conversationContext, !context.isEmpty {
+            contentBlocks.append([
+                "type": "text",
+                "text": "Recent conversation for context:\n\(context)\n\n---\n"
+            ])
+        }
 
         // Add images
         for imageBase64 in images {
@@ -380,10 +491,10 @@ After STATUS line, output "---" then answer in 3-4 bullet points. Be direct, no 
             ])
         }
 
-        // Add text
+        // Add prompt/instructions
         contentBlocks.append([
             "type": "text",
-            "text": prompt
+            "text": contextualPrompt
         ])
 
         let requestBody: [String: Any] = [
@@ -458,6 +569,288 @@ After STATUS line, output "---" then answer in 3-4 bullet points. Be direct, no 
             }
 
             return .success(())
+        } catch {
+            return .failure(error)
+        }
+    }
+
+
+    // MARK: - Tool Use Support
+    
+    /// Response content block types
+    enum ContentBlock {
+        case text(String)
+        case toolUse(id: String, name: String, input: [String: Any])
+    }
+    
+    /// Stop reason from API response
+    enum StopReason: String {
+        case endTurn = "end_turn"
+        case toolUse = "tool_use"
+        case maxTokens = "max_tokens"
+        case stopSequence = "stop_sequence"
+    }
+    
+    /// Response from streaming with tools
+    struct ToolUseResponse {
+        let contentBlocks: [ContentBlock]
+        let stopReason: StopReason
+        
+        var textContent: String {
+            contentBlocks.compactMap { block in
+                if case .text(let text) = block { return text }
+                return nil
+            }.joined()
+        }
+        
+        var toolUses: [ToolUseRequest] {
+            contentBlocks.compactMap { block in
+                if case .toolUse(let id, let name, let input) = block {
+                    return ToolUseRequest(id: id, name: name, input: input)
+                }
+                return nil
+            }
+        }
+    }
+    
+    /// Chat with tools - handles the full tool use loop
+    /// - Parameters:
+    ///   - question: The user's question
+    ///   - tools: Available tool definitions
+    ///   - systemPrompt: Optional system prompt
+    ///   - conversationHistory: Optional previous messages for multi-turn context
+    ///   - onToolUse: Callback when a tool is being used (for UI updates)
+    ///   - onChunk: Callback for streaming text chunks
+    /// - Returns: The final answer after any tool use
+    func chatWithTools(
+        question: String,
+        tools: [ToolDefinition],
+        systemPrompt: String? = nil,
+        conversationHistory: ChatHistory? = nil,
+        onToolUse: @escaping (String) -> Void,
+        onChunk: @escaping (String) -> Void
+    ) async -> Result<String, Error> {
+        // === LOGGING ===
+        print("\n[AnthropicClient] ========== CHAT WITH TOOLS ==========")
+        print("[AnthropicClient] QUESTION: \(question)")
+        print("[AnthropicClient] TOOLS: \(tools.map { $0.name }.joined(separator: ", "))")
+        if let system = systemPrompt {
+            print("[AnthropicClient] SYSTEM PROMPT (first 500 chars): \(String(system.prefix(500)))...")
+        }
+
+        // Build messages: conversation history + current question
+        var messages: [[String: Any]] = conversationHistory?.toAPIMessagesWithQuery(question)
+            ?? [["role": "user", "content": question]
+        ]
+
+        var iterations = 0
+        let maxIterations = 5  // Prevent infinite loops
+        
+        while iterations < maxIterations {
+            iterations += 1
+            
+            let response = await sendMessageWithTools(
+                messages: messages,
+                tools: tools,
+                systemPrompt: systemPrompt,
+                onChunk: onChunk
+            )
+            
+            switch response {
+            case .failure(let error):
+                print("[AnthropicClient] ERROR: \(error.localizedDescription)")
+                print("[AnthropicClient] ========================================\n")
+                return .failure(error)
+                
+            case .success(let toolResponse):
+                // If end_turn, we're done
+                if toolResponse.stopReason == .endTurn || toolResponse.stopReason == .maxTokens {
+                    print("[AnthropicClient] FINAL ANSWER (first 500 chars): \(String(toolResponse.textContent.prefix(500)))...")
+                    print("[AnthropicClient] ========================================\n")
+                    return .success(toolResponse.textContent)
+                }
+
+                // If tool_use, execute tools and continue
+                if toolResponse.stopReason == .toolUse && !toolResponse.toolUses.isEmpty {
+                    // Notify UI about tool usage
+                    for toolUse in toolResponse.toolUses {
+                        print("[AnthropicClient] TOOL CALL: \(toolUse.name) with input: \(toolUse.input)")
+                        onToolUse(toolUse.name)
+                    }
+
+                    // Execute tools
+                    let toolResults = await ToolExecutor.shared.processToolUses(toolResponse.toolUses)
+                    print("[AnthropicClient] TOOL RESULTS: \(toolResults.count) results received")
+                    
+                    // Build assistant message with tool uses
+                    var assistantContent: [[String: Any]] = []
+                    for block in toolResponse.contentBlocks {
+                        switch block {
+                        case .text(let text):
+                            if !text.isEmpty {
+                                assistantContent.append(["type": "text", "text": text])
+                            }
+                        case .toolUse(let id, let name, let input):
+                            assistantContent.append([
+                                "type": "tool_use",
+                                "id": id,
+                                "name": name,
+                                "input": input
+                            ])
+                        }
+                    }
+                    
+                    messages.append(["role": "assistant", "content": assistantContent])
+                    
+                    // Add tool results
+                    let toolResultContent = toolResults.map { $0.toDictionary() }
+                    messages.append(["role": "user", "content": toolResultContent])
+                    
+                    // Continue the loop
+                    continue
+                }
+                
+                // Default: return whatever text we have
+                return .success(toolResponse.textContent)
+            }
+        }
+        
+        return .failure(NSError(domain: "Max tool use iterations reached", code: -1))
+    }
+    
+    /// Send a streaming message with tools support
+    private func sendMessageWithTools(
+        messages: [[String: Any]],
+        tools: [ToolDefinition],
+        systemPrompt: String?,
+        onChunk: @escaping (String) -> Void
+    ) async -> Result<ToolUseResponse, Error> {
+        var requestBody: [String: Any] = [
+            "model": model,
+            "max_tokens": maxTokens,
+            "stream": true,
+            "messages": messages
+        ]
+        
+        if let system = systemPrompt {
+            requestBody["system"] = system
+        }
+        
+        if !tools.isEmpty {
+            requestBody["tools"] = tools.map { $0.toDictionary() }
+            requestBody["tool_choice"] = ["type": "auto"]
+        }
+        
+        guard let url = URL(string: baseURL) else {
+            return .failure(NSError(domain: "Invalid URL", code: -1))
+        }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.addValue(apiKey, forHTTPHeaderField: "x-api-key")
+        request.addValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
+        request.addValue("application/json", forHTTPHeaderField: "content-type")
+        
+        do {
+            request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
+        } catch {
+            return .failure(error)
+        }
+        
+        do {
+            let (bytes, response) = try await URLSession.shared.bytes(for: request)
+            
+            guard let httpResponse = response as? HTTPURLResponse else {
+                return .failure(NSError(domain: "Invalid response", code: -1))
+            }
+            
+            guard (200...299).contains(httpResponse.statusCode) else {
+                var errorMessage = "HTTP \(httpResponse.statusCode)"
+                var errorBody = ""
+                for try await line in bytes.lines {
+                    errorBody += line + "\n"
+                    if errorBody.count > 500 { break }
+                }
+                if let data = errorBody.data(using: .utf8),
+                   let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                   let error = json["error"] as? [String: Any],
+                   let message = error["message"] as? String {
+                    errorMessage = message
+                }
+                return .failure(NSError(domain: errorMessage, code: httpResponse.statusCode))
+            }
+            
+            // Parse SSE stream
+            var contentBlocks: [ContentBlock] = []
+            var currentTextContent = ""
+            var currentToolUse: (id: String, name: String, inputJson: String)? = nil
+            var stopReason: StopReason = .endTurn
+            
+            for try await line in bytes.lines {
+                if line.hasPrefix("data: ") {
+                    let jsonString = String(line.dropFirst(6))
+                    if jsonString == "[DONE]" { break }
+                    
+                    guard let data = jsonString.data(using: .utf8),
+                          let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                          let type = json["type"] as? String else { continue }
+                    
+                    switch type {
+                    case "content_block_start":
+                        if let contentBlock = json["content_block"] as? [String: Any],
+                           let blockType = contentBlock["type"] as? String {
+                            if blockType == "tool_use" {
+                                let id = contentBlock["id"] as? String ?? ""
+                                let name = contentBlock["name"] as? String ?? ""
+                                currentToolUse = (id: id, name: name, inputJson: "")
+                            }
+                        }
+                        
+                    case "content_block_delta":
+                        if let delta = json["delta"] as? [String: Any] {
+                            if let text = delta["text"] as? String {
+                                currentTextContent += text
+                                onChunk(text)
+                            } else if let partialJson = delta["partial_json"] as? String {
+                                currentToolUse?.inputJson += partialJson
+                            }
+                        }
+                        
+                    case "content_block_stop":
+                        // Finalize current block
+                        if let toolUse = currentToolUse {
+                            // Parse the accumulated JSON
+                            var input: [String: Any] = [:]
+                            if let data = toolUse.inputJson.data(using: .utf8),
+                               let parsed = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                                input = parsed
+                            }
+                            contentBlocks.append(.toolUse(id: toolUse.id, name: toolUse.name, input: input))
+                            currentToolUse = nil
+                        } else if !currentTextContent.isEmpty {
+                            contentBlocks.append(.text(currentTextContent))
+                            currentTextContent = ""
+                        }
+                        
+                    case "message_delta":
+                        if let messageDelta = json["delta"] as? [String: Any],
+                           let reason = messageDelta["stop_reason"] as? String {
+                            stopReason = StopReason(rawValue: reason) ?? .endTurn
+                        }
+                        
+                    default:
+                        break
+                    }
+                }
+            }
+            
+            // Add any remaining text content
+            if !currentTextContent.isEmpty {
+                contentBlocks.append(.text(currentTextContent))
+            }
+            
+            return .success(ToolUseResponse(contentBlocks: contentBlocks, stopReason: stopReason))
+            
         } catch {
             return .failure(error)
         }

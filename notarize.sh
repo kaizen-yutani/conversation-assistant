@@ -8,13 +8,13 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-echo -e "${GREEN}🔐 Notarizing Interview Master DMG${NC}"
+echo -e "${GREEN}🔐 Notarizing Conversation Assistant DMG${NC}"
 
 # Configuration
-DMG_NAME="InterviewMaster-v1.0.0"
+DMG_NAME="ConversationAssistant-v1.0.0"
 BUILD_DIR="build"
 DMG_FILE="${BUILD_DIR}/${DMG_NAME}.dmg"
-BUNDLE_ID="com.nikolayprosenikov.interviewmaster"
+BUNDLE_ID="com.nikolayprosenikov.conversationassistant"
 APPLE_ID="n.prosenikov@gmail.com"
 TEAM_ID="2Q562K9C7N"
 KEYCHAIN_PROFILE="notarytool-password"

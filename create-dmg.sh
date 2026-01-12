@@ -7,12 +7,12 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-echo -e "${GREEN}📦 Creating DMG for Interview Master${NC}"
+echo -e "${GREEN}📦 Creating DMG for Conversation Assistant${NC}"
 
 # Configuration
-APP_NAME="InterviewMaster"
-DMG_NAME="InterviewMaster-v1.0.0"
-VOLUME_NAME="Interview Master"
+APP_NAME="ConversationAssistant"
+DMG_NAME="ConversationAssistant-v1.0.0"
+VOLUME_NAME="Conversation Assistant"
 BUILD_DIR="build"
 APP_BUNDLE="${BUILD_DIR}/${APP_NAME}.app"
 DMG_DIR="${BUILD_DIR}/dmg"

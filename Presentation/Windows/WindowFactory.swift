@@ -6,15 +6,24 @@ class WindowFactory {
 
     /// Create the main application window with privacy settings
     static func createMainWindow() -> NSWindow {
+        // Calculate window size (70% width, 85% height)
+        let screenFrame = NSScreen.main?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1200, height: 800)
+        let windowWidth = screenFrame.width * 0.7
+        let windowHeight = screenFrame.height * 0.85
+
+        // Center the window on screen
+        let windowX = screenFrame.origin.x + (screenFrame.width - windowWidth) / 2
+        let windowY = screenFrame.origin.y + (screenFrame.height - windowHeight) / 2
+
         let window = NSWindow(
-            contentRect: NSRect(x: 100, y: 100, width: 700, height: 500),
+            contentRect: NSRect(x: windowX, y: windowY, width: windowWidth, height: windowHeight),
             styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
             backing: .buffered,
             defer: false
         )
 
-        // ⭐ CORE LOGIC: Hidden from screen sharing (DON'T TOUCH!)
-        window.sharingType = .none
+        // Visible for screen sharing/recording
+        window.sharingType = .readOnly
 
         // Glass effect settings
         window.titlebarAppearsTransparent = true

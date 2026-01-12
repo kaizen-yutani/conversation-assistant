@@ -1,6 +1,5 @@
 build/
 *.dmg
 .DS_Store
-InterviewMaster
-interview_master_full
+ConversationAssistant
 *.aiff

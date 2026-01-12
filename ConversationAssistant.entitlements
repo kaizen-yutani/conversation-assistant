@@ -2,12 +2,17 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <!-- ✅ ENABLE APP SANDBOX (REQUIRED FOR MAC APP STORE) -->
+    <!-- App Sandbox disabled for Developer ID distribution -->
+    <!-- Re-enable for Mac App Store submission -->
     <key>com.apple.security.app-sandbox</key>
-    <true/>
+    <false/>
 
     <!-- Network access for Anthropic/OpenAI API calls -->
     <key>com.apple.security.network.client</key>
+    <true/>
+
+    <!-- Network server for OAuth callback (localhost only) -->
+    <key>com.apple.security.network.server</key>
     <true/>
 
     <!-- File access for exporting notes -->

@@ -241,8 +241,219 @@ class HoverButton: NSButton {
     }
 }
 
+// MARK: - Connection Button
+
+/// Stylized button for OAuth connection indicators (Confluence, Jira, GitHub)
 @available(macOS 14.0, *)
-class InterviewMasterDelegate: NSObject, NSApplicationDelegate, NSTextViewDelegate {
+class ConnectionButton: NSButton {
+    var isConnected = false {
+        didSet { updateVisualState() }
+    }
+
+    var accentColor: NSColor = .systemBlue
+    private var trackingArea: NSTrackingArea?
+    private var isHovered = false
+
+    // Subviews
+    private let iconView = NSImageView()
+    private let statusDot = NSView()
+    private let labelView = NSTextField(labelWithString: "")
+    private let gradientLayer = CAGradientLayer()
+
+    // Colors
+    private let connectedColor = NSColor(red: 0.2, green: 0.84, blue: 0.45, alpha: 1.0) // Green
+    private let disconnectedColor = NSColor.white.withAlphaComponent(0.35) // Grey
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        setupButton()
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        setupButton()
+    }
+
+    private func setupButton() {
+        title = ""
+        bezelStyle = .inline
+        isBordered = false
+        wantsLayer = true
+
+        // Glass morphism effect
+        layer?.cornerRadius = 12
+        layer?.borderWidth = 1.0
+        layer?.masksToBounds = false
+
+        // Subtle shadow for depth
+        layer?.shadowColor = NSColor.black.cgColor
+        layer?.shadowOpacity = 0.15
+        layer?.shadowOffset = CGSize(width: 0, height: 1)
+        layer?.shadowRadius = 3
+
+        // Gradient background layer
+        gradientLayer.cornerRadius = 12
+        gradientLayer.masksToBounds = true
+        gradientLayer.startPoint = CGPoint(x: 0, y: 0)
+        gradientLayer.endPoint = CGPoint(x: 1, y: 1)
+        layer?.insertSublayer(gradientLayer, at: 0)
+
+        // Icon
+        iconView.frame = NSRect(x: 10, y: 6, width: 14, height: 14)
+        iconView.contentTintColor = .white.withAlphaComponent(0.9)
+        iconView.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 11, weight: .semibold)
+        addSubview(iconView)
+
+        // Status dot
+        statusDot.frame = NSRect(x: 26, y: 10, width: 6, height: 6)
+        statusDot.wantsLayer = true
+        statusDot.layer?.cornerRadius = 3
+        addSubview(statusDot)
+
+        // Label
+        labelView.frame = NSRect(x: 36, y: 5, width: 60, height: 16)
+        labelView.font = .systemFont(ofSize: 11, weight: .semibold)
+        labelView.textColor = .white.withAlphaComponent(0.95)
+        addSubview(labelView)
+
+        updateVisualState()
+    }
+
+    override func layout() {
+        super.layout()
+        gradientLayer.frame = bounds
+    }
+
+    func configure(icon: String, label: String, accent: NSColor) {
+        iconView.image = NSImage(systemSymbolName: icon, accessibilityDescription: label)
+        labelView.stringValue = label
+        accentColor = accent
+
+        // Auto-size based on label width
+        labelView.sizeToFit()
+        let labelWidth = labelView.frame.width
+        let newWidth = 10 + 14 + 4 + 6 + 4 + labelWidth + 12  // icon padding + icon + gap + dot + gap + label + end padding
+        frame.size.width = newWidth
+        labelView.frame = NSRect(x: 36, y: 5, width: labelWidth, height: 16)
+
+        updateVisualState()
+    }
+
+    private func updateVisualState() {
+        gradientLayer.frame = bounds
+
+        if isConnected {
+            // Connected state - green
+            let baseColor = connectedColor
+
+            if isHovered {
+                gradientLayer.colors = [
+                    baseColor.withAlphaComponent(0.3).cgColor,
+                    baseColor.withAlphaComponent(0.15).cgColor
+                ]
+            } else {
+                gradientLayer.colors = [
+                    baseColor.withAlphaComponent(0.15).cgColor,
+                    baseColor.withAlphaComponent(0.08).cgColor
+                ]
+            }
+
+            layer?.borderColor = baseColor.withAlphaComponent(isHovered ? 0.5 : 0.3).cgColor
+            statusDot.layer?.backgroundColor = baseColor.cgColor
+            iconView.contentTintColor = baseColor.blended(withFraction: 0.3, of: .white)
+            labelView.textColor = .white
+        } else {
+            // Disconnected state - red dot
+            if isHovered {
+                gradientLayer.colors = [
+                    accentColor.withAlphaComponent(0.2).cgColor,
+                    accentColor.withAlphaComponent(0.1).cgColor
+                ]
+                layer?.borderColor = accentColor.withAlphaComponent(0.4).cgColor
+                iconView.contentTintColor = accentColor.blended(withFraction: 0.5, of: .white)
+            } else {
+                gradientLayer.colors = [
+                    NSColor.white.withAlphaComponent(0.08).cgColor,
+                    NSColor.white.withAlphaComponent(0.04).cgColor
+                ]
+                layer?.borderColor = NSColor.white.withAlphaComponent(0.12).cgColor
+                iconView.contentTintColor = .white.withAlphaComponent(0.7)
+            }
+
+            statusDot.layer?.backgroundColor = disconnectedColor.cgColor
+            labelView.textColor = .white.withAlphaComponent(isHovered ? 1.0 : 0.8)
+        }
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let existing = trackingArea {
+            removeTrackingArea(existing)
+        }
+        // Use .activeAlways to ensure tracking works even when window isn't key
+        trackingArea = NSTrackingArea(
+            rect: bounds,
+            options: [.mouseEnteredAndExited, .activeAlways],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(trackingArea!)
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        isHovered = true
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.15
+            self.animator().layer?.transform = CATransform3DMakeScale(1.03, 1.03, 1.0)
+        }
+        updateVisualState()
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        isHovered = false
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.2
+            self.animator().layer?.transform = CATransform3DIdentity
+        }
+        updateVisualState()
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        print("[ConnectionButton] mouseDown on '\(labelView.stringValue)'")
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.08
+            self.animator().layer?.transform = CATransform3DMakeScale(0.96, 0.96, 1.0)
+            self.animator().alphaValue = 0.8
+        }
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        print("[ConnectionButton] mouseUp on '\(labelView.stringValue)'")
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.15
+            self.animator().layer?.transform = isHovered ? CATransform3DMakeScale(1.03, 1.03, 1.0) : CATransform3DIdentity
+            self.animator().alphaValue = 1.0
+        }
+
+        // Use hit testing as reliable check (works even if tracking area didn't fire)
+        let locationInView = convert(event.locationInWindow, from: nil)
+        let isMouseInBounds = bounds.contains(locationInView)
+
+        print("[ConnectionButton] isHovered=\(isHovered), isMouseInBounds=\(isMouseInBounds), target=\(target != nil), action=\(action != nil)")
+
+        // Send action if mouse is still over the button (use hit test OR isHovered)
+        if (isMouseInBounds || isHovered), let target = target, let action = action {
+            print("[ConnectionButton] Sending action for '\(labelView.stringValue)'")
+            _ = target.perform(action, with: self)
+        } else {
+            print("[ConnectionButton] NOT sending action - conditions not met")
+        }
+    }
+}
+
+@available(macOS 14.0, *)
+class ConversationAssistantDelegate: NSObject, NSApplicationDelegate, NSTextViewDelegate {
+    var statusItem: NSStatusItem!
     var window: NSWindow!
     var textView: NSTextView!
     var statusLabel: NSTextField!
@@ -269,23 +480,32 @@ class InterviewMasterDelegate: NSObject, NSApplicationDelegate, NSTextViewDelega
     var recordingTimer: Timer?
     
     // Bottom status bar
-    var statusBar: NSVisualEffectView!
+    var statusBar: NSView!
     var anthropicStatusDot: NSView!
     var groqStatusDot: NSView!
+    var confluenceStatusDot: NSView!
+    var jiraStatusDot: NSView!
+    var githubStatusDot: NSView!
+    var toolsContainer: NSStackView!  // Container for tool indicators
+
+    // Clickable indicator buttons for data sources (OAuth connections)
+    var confluenceButton: ConnectionButton!
+    var jiraButton: ConnectionButton!
+    var githubButton: ConnectionButton!
     var notesContentView: NSView!
     var codingContentView: NSView!
     var voiceContentView: NSView!
 
-    // Voice tab - Interview assistant
+    // Voice tab - Conversation assistant
     var voiceTimelineScrollView: NSScrollView!
     var voiceTimelineContainer: NSView!
     var voiceStatusLabel: NSTextField!
-    var systemWaveformBars: [NSView] = []   // Gold waveform - system audio (interviewer)
+    var systemWaveformBars: [NSView] = []   // Gold waveform - system audio (speaker)
     var systemIndicatorLabel: NSTextField!
     var voiceToggleButton: HoverButton!
     var languageDropdown: NSPopUpButton!
     var techStackDropdown: NSPopUpButton!
-    var voiceMessages: [InterviewMessage] = []
+    var voiceMessages: [ConversationMessage] = []
     var typingDotsView: NSView!
     var typingDots: [CALayer] = []
 
@@ -293,6 +513,36 @@ class InterviewMasterDelegate: NSObject, NSApplicationDelegate, NSTextViewDelega
     var nestButtonContainer: NSView!
     var nestButtonInner: CALayer!
     var nestIconView: NSImageView!
+
+    // Voice Bar - expandable pill with waveform (matching reference design)
+    var voiceBarContainer: NSView!
+    var voiceBarInner: CALayer!
+    var voiceBarMicButton: NSView!           // Left: mic for push-to-talk
+    var voiceBarMicIcon: NSImageView!
+    var voiceBarMicClickArea: HoverButton!
+    var voiceBarSendButton: NSView!          // Right: stop button
+    var voiceBarSendIcon: NSImageView!
+    var voiceBarSendClickArea: HoverButton!
+    var voiceBarWaveformBars: [NSView] = []  // Center: 25 waveform bars
+    var voiceBarLabel: NSTextField!
+    var isVoiceBarExpanded = false
+    let voiceBarCollapsedWidth: CGFloat = 120
+    let voiceBarExpandedWidth: CGFloat = 320
+
+    // Prompt input field (pill-styled text input at bottom)
+    var promptInputContainer: NSView!
+    var promptInputField: NSTextField!
+    var promptSendButton: HoverButton!
+    var promptSendIcon: NSImageView!
+    var isPromptProcessing = false
+
+    // Direct question mic button (Ask button)
+    var askButtonContainer: NSView!
+    var askButtonInner: CALayer!
+    var askIconView: NSImageView!
+    var askButton: HoverButton!
+    var isAskingDirectQuestion = false
+    var directQuestionRecorder: VADAudioRecorder?
 
     // Pinned coding task solution
     var pinnedSolutionContainer: ScrollCaptureView!
@@ -310,9 +560,10 @@ class InterviewMasterDelegate: NSObject, NSApplicationDelegate, NSTextViewDelega
 
     var vadRecorder: VADAudioRecorder?
     var systemAudioCapture: SystemAudioCapture?
-    var groqClient: GroqInterviewClient?
+    var groqClient: GroqSpeechClient?
     var conversationContext = ConversationContext()
-    var isInterviewActive = false
+    var chatHistory = ChatHistory(maxMessages: 20)  // Multi-turn conversation history
+    var isSessionActive = false
     var groqApiKey: String? {
         return ApiKeyManager.shared.getKey(.groq)
     }
@@ -377,6 +628,10 @@ class InterviewMasterDelegate: NSObject, NSApplicationDelegate, NSTextViewDelega
     // Screenshot alert
     var alertWindow: NSWindow?
     var settingsWindowController: SettingsWindowController?
+
+    // Onboarding windows
+    var permissionsOnboardingWindow: PermissionsOnboardingWindow?
+    var atlassianOnboardingWindow: AtlassianOnboardingWindow?
     var alertThumbnailsContainer: NSView?
     var screenshotMonitorTimer: Timer?
     var lastScreenshotCount = 0
@@ -387,8 +642,8 @@ class InterviewMasterDelegate: NSObject, NSApplicationDelegate, NSTextViewDelega
     var permissionCheckTimer: Timer?
 
     // Persistence
-    let notesStorageKey = "InterviewMaster.SavedNotes"
-    let dataConsentKey = "InterviewMaster.DataConsentGiven"
+    let notesStorageKey = "ConversationAssistant.SavedNotes"
+    let dataConsentKey = "ConversationAssistant.DataConsentGiven"
 
     override init() {
         self.screenCaptureService = ScreenCaptureService()
@@ -401,12 +656,14 @@ class InterviewMasterDelegate: NSObject, NSApplicationDelegate, NSTextViewDelega
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         setupMenuBar()
+        setupStatusItem()
         setupWindow()
         setupUI()
         setupHotkey()
         startScreenShareMonitoring()
         startScreenshotMonitoring()
-        
+        registerURLHandler()
+
         // Listen for API key updates from Settings
         NotificationCenter.default.addObserver(
             forName: .apiKeysUpdated,
@@ -414,6 +671,51 @@ class InterviewMasterDelegate: NSObject, NSApplicationDelegate, NSTextViewDelega
             queue: .main
         ) { [weak self] _ in
             self?.handleApiKeysUpdated()
+        }
+
+        // Listen for data source updates (OAuth connections, etc.)
+        NotificationCenter.default.addObserver(
+            forName: .dataSourcesUpdated,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.updateStatusBarIndicators()
+        }
+
+        // Listen for OAuth completion
+        NotificationCenter.default.addObserver(
+            forName: .oauthCompleted,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.updateStatusBarIndicators()
+        }
+    }
+
+    private func registerURLHandler() {
+        // Register for URL scheme callbacks (needed for OAuth)
+        NSAppleEventManager.shared().setEventHandler(
+            self,
+            andSelector: #selector(handleURLEvent(_:withReplyEvent:)),
+            forEventClass: AEEventClass(kInternetEventClass),
+            andEventID: AEEventID(kAEGetURL)
+        )
+    }
+
+    @objc private func handleURLEvent(_ event: NSAppleEventDescriptor, withReplyEvent replyEvent: NSAppleEventDescriptor) {
+        guard let urlString = event.paramDescriptor(forKeyword: AEKeyword(keyDirectObject))?.stringValue,
+              let url = URL(string: urlString) else {
+            return
+        }
+
+        NSLog("App: Received URL event: \(url)")
+
+        if url.scheme == OAuthConfig.urlScheme {
+            OAuthManager.shared.handleCallback(url)
+
+            // Bring app to front
+            NSApp.activate(ignoringOtherApps: true)
+            window.makeKeyAndOrderFront(nil)
         }
     }
     
@@ -441,17 +743,17 @@ class InterviewMasterDelegate: NSObject, NSApplicationDelegate, NSTextViewDelega
         appMenuItem.submenu = appMenu
         mainMenu.addItem(appMenuItem)
 
-        appMenu.addItem(withTitle: "About Interview Master", action: #selector(showAbout), keyEquivalent: "")
+        appMenu.addItem(withTitle: "About Conversation Assistant", action: #selector(showAbout), keyEquivalent: "")
         appMenu.addItem(NSMenuItem.separator())
         appMenu.addItem(withTitle: "Settings...", action: #selector(showSettings), keyEquivalent: ",")
         appMenu.addItem(NSMenuItem.separator())
-        let hideItem = appMenu.addItem(withTitle: "Hide Interview Master", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
+        let hideItem = appMenu.addItem(withTitle: "Hide Conversation Assistant", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
         hideItem.keyEquivalentModifierMask = [.command]
         appMenu.addItem(withTitle: "Hide Others", action: #selector(NSApplication.hideOtherApplications(_:)), keyEquivalent: "h")
         appMenu.items.last?.keyEquivalentModifierMask = [.command, .option]
         appMenu.addItem(withTitle: "Show All", action: #selector(NSApplication.unhideAllApplications(_:)), keyEquivalent: "")
         appMenu.addItem(NSMenuItem.separator())
-        appMenu.addItem(withTitle: "Quit Interview Master", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        appMenu.addItem(withTitle: "Quit Conversation Assistant", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
 
         // File menu
         let fileMenu = NSMenu(title: "File")
@@ -514,7 +816,7 @@ class InterviewMasterDelegate: NSObject, NSApplicationDelegate, NSTextViewDelega
         helpMenuItem.submenu = helpMenu
         mainMenu.addItem(helpMenuItem)
 
-        helpMenu.addItem(withTitle: "Interview Master Help", action: #selector(showHelp), keyEquivalent: "?")
+        helpMenu.addItem(withTitle: "Conversation Assistant Help", action: #selector(showHelp), keyEquivalent: "?")
         helpMenu.addItem(NSMenuItem.separator())
         helpMenu.addItem(withTitle: "Keyboard Shortcuts", action: #selector(showKeyboardShortcuts), keyEquivalent: "")
         helpMenu.addItem(withTitle: "Privacy Policy", action: #selector(showPrivacyPolicy), keyEquivalent: "")
@@ -524,10 +826,51 @@ class InterviewMasterDelegate: NSObject, NSApplicationDelegate, NSTextViewDelega
         NSApp.windowsMenu = windowMenu
     }
 
+    func setupStatusItem() {
+        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+
+        if let button = statusItem.button {
+            // Use SF Symbol for the icon
+            let config = NSImage.SymbolConfiguration(pointSize: 14, weight: .medium)
+            if let image = NSImage(systemSymbolName: "waveform.circle.fill", accessibilityDescription: "Conversation Assistant") {
+                let symbolImage = image.withSymbolConfiguration(config)
+                button.image = symbolImage
+            }
+            button.action = #selector(statusItemClicked)
+            button.target = self
+        }
+
+        // Create status item menu
+        let menu = NSMenu()
+        menu.addItem(withTitle: "Show Window", action: #selector(showMainWindow), keyEquivalent: "")
+        menu.addItem(NSMenuItem.separator())
+        menu.addItem(withTitle: "Settings...", action: #selector(showSettings), keyEquivalent: ",")
+        menu.addItem(NSMenuItem.separator())
+        menu.addItem(withTitle: "Quit", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        statusItem.menu = menu
+    }
+
+    @objc func statusItemClicked() {
+        showMainWindow()
+    }
+
+    @objc func showMainWindow() {
+        if window.isMiniaturized {
+            window.deminiaturize(nil)
+        }
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+    
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        showMainWindow()
+        return true
+    }
+
     @objc func showAbout() {
         let alert = NSAlert()
-        alert.messageText = "Interview Master"
-        alert.informativeText = "Version 1.0.0\n\nAI-powered interview assistant for software engineers.\n\nCapture coding problems and get instant analysis with Claude AI.\n\n© 2024 Nikolay Prosenikov"
+        alert.messageText = "Conversation Assistant"
+        alert.informativeText = "Version 1.0.0\n\nAI-powered conversation assistant with knowledge base integration.\n\nCapture coding problems and get instant analysis with Claude AI.\n\n© 2024 Nikolay Prosenikov"
         alert.alertStyle = .informational
         alert.addButton(withTitle: "OK")
         alert.addButton(withTitle: "Privacy Policy")
@@ -540,7 +883,7 @@ class InterviewMasterDelegate: NSObject, NSApplicationDelegate, NSTextViewDelega
 
     @objc func showPrivacyPolicy() {
         // Privacy Policy URL - required for App Store (Guideline 5.1.1)
-        if let url = URL(string: "https://github.com/nikolayprosenikov/interview-master/blob/main/PRIVACY.md") {
+        if let url = URL(string: "https://github.com/nikolayprosenikov/conversation-assistant/blob/main/PRIVACY.md") {
             NSWorkspace.shared.open(url)
         }
     }
@@ -555,7 +898,7 @@ class InterviewMasterDelegate: NSObject, NSApplicationDelegate, NSTextViewDelega
     @objc func exportNotes() {
         let savePanel = NSSavePanel()
         savePanel.allowedContentTypes = [.text, .plainText]
-        savePanel.nameFieldStringValue = "interview-notes.md"
+        savePanel.nameFieldStringValue = "session-notes.md"
         savePanel.title = "Export Notes"
 
         if savePanel.runModal() == .OK, let url = savePanel.url {
@@ -568,7 +911,7 @@ class InterviewMasterDelegate: NSObject, NSApplicationDelegate, NSTextViewDelega
     }
 
     @objc func showHelp() {
-        if let url = URL(string: "https://github.com/nikolayprosenikov/interview-master") {
+        if let url = URL(string: "https://github.com/nikolayprosenikov/conversation-assistant") {
             NSWorkspace.shared.open(url)
         }
     }
@@ -603,10 +946,44 @@ class InterviewMasterDelegate: NSObject, NSApplicationDelegate, NSTextViewDelega
     func setupWindow() {
         window = WindowFactory.createMainWindow()
 
-        // Use accessory policy - no dock icon
-        NSApp.setActivationPolicy(.accessory)
+        // Show in dock
+        NSApp.setActivationPolicy(.regular)
 
-        // Show window on startup
+        // Check if onboarding needed
+        if !PermissionChecker.hasCompletedOnboarding() {
+            // Show permissions onboarding first
+            showPermissionsOnboarding()
+        } else if AtlassianOnboardingWindow.shouldShow() {
+            // Permissions done, but Atlassian not connected - show that
+            showAtlassianOnboarding()
+        } else {
+            // All onboarding complete - show main window
+            showMainWindowAfterOnboarding()
+        }
+    }
+
+    private func showPermissionsOnboarding() {
+        permissionsOnboardingWindow = PermissionsOnboardingWindow { [weak self] in
+            // Permissions granted - check if Atlassian onboarding needed
+            if AtlassianOnboardingWindow.shouldShow() {
+                self?.showAtlassianOnboarding()
+            } else {
+                self?.showMainWindowAfterOnboarding()
+            }
+        }
+        permissionsOnboardingWindow?.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    private func showAtlassianOnboarding() {
+        atlassianOnboardingWindow = AtlassianOnboardingWindow { [weak self] in
+            self?.showMainWindowAfterOnboarding()
+        }
+        atlassianOnboardingWindow?.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    private func showMainWindowAfterOnboarding() {
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
@@ -836,7 +1213,7 @@ class InterviewMasterDelegate: NSObject, NSApplicationDelegate, NSTextViewDelega
             textView.string = savedNotes
         } else {
             textView.string = """
-# Common Interview Questions
+# Quick Reference
 
 ## JavaScript/TypeScript
 
@@ -1045,56 +1422,156 @@ The function uses a **hash map** for `O(n)` time complexity.
         voiceControlBar.wantsLayer = true
         voiceContentView.addSubview(voiceControlBar)
 
-        // Pill-style Start/Stop button (macOS style)
-        let pillWidth: CGFloat = 110
-        let pillHeight: CGFloat = 36
-        let pillX: CGFloat = 5
-        let pillY: CGFloat = (55 - pillHeight) / 2
-        let pillRadius: CGFloat = pillHeight / 2
+        // === SINGLE EXPANDABLE VOICE BAR (Reference Design) ===
+        // Collapsed: Waveform icon + "Start" text
+        // Expanded: [Mic button] [Waveform Bars] [Stop button]
+        let vbHeight: CGFloat = 44
+        let vbY: CGFloat = (55 - vbHeight) / 2
+        let vbRadius: CGFloat = vbHeight / 2
 
-        nestButtonContainer = NSView(frame: NSRect(x: pillX, y: pillY, width: pillWidth, height: pillHeight))
-        nestButtonContainer.wantsLayer = true
-        voiceControlBar.addSubview(nestButtonContainer)
+        // Main container - will animate width on expand/collapse
+        voiceBarContainer = NSView(frame: NSRect(x: 5, y: vbY, width: voiceBarCollapsedWidth, height: vbHeight))
+        voiceBarContainer.wantsLayer = true
+        voiceControlBar.addSubview(voiceBarContainer)
 
-        // Pill button face - transparent with subtle border
-        nestButtonInner = CALayer()
-        nestButtonInner.frame = CGRect(x: 0, y: 0, width: pillWidth, height: pillHeight)
-        nestButtonInner.cornerRadius = pillRadius
-        nestButtonInner.backgroundColor = NSColor.white.withAlphaComponent(0.08).cgColor
-        nestButtonInner.borderWidth = 1
-        nestButtonInner.borderColor = NSColor.white.withAlphaComponent(0.2).cgColor
-        nestButtonContainer.layer?.addSublayer(nestButtonInner)
+        // Pill background layer
+        voiceBarInner = CALayer()
+        voiceBarInner.frame = CGRect(x: 0, y: 0, width: voiceBarCollapsedWidth, height: vbHeight)
+        voiceBarInner.cornerRadius = vbRadius
+        voiceBarInner.backgroundColor = NSColor.white.withAlphaComponent(0.08).cgColor
+        voiceBarInner.borderWidth = 1
+        voiceBarInner.borderColor = NSColor.white.withAlphaComponent(0.25).cgColor
+        voiceBarContainer.layer?.addSublayer(voiceBarInner)
 
-        // Icon + text centered as a group
-        let iconSize: CGFloat = 14
-        let gap: CGFloat = 6
-        let textWidth: CGFloat = 36
-        let contentWidth = iconSize + gap + textWidth
-        let contentX = (pillWidth - contentWidth) / 2
+        // === COLLAPSED STATE: Icon + "Start" label ===
+        let collapsedIconSize: CGFloat = 18
+        let collapsedIconX: CGFloat = 16
+        nestIconView = NSImageView(frame: NSRect(x: collapsedIconX, y: (vbHeight - collapsedIconSize) / 2, width: collapsedIconSize, height: collapsedIconSize))
+        nestIconView.image = NSImage(systemSymbolName: "waveform.circle.fill", accessibilityDescription: "Voice")
+        nestIconView.contentTintColor = NSColor.white.withAlphaComponent(0.9)
+        nestIconView.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 16, weight: .medium)
+        voiceBarContainer.addSubview(nestIconView)
 
-        nestIconView = NSImageView(frame: NSRect(x: contentX, y: (pillHeight - iconSize) / 2, width: iconSize, height: iconSize))
-        nestIconView.image = NSImage(systemSymbolName: "play.fill", accessibilityDescription: "Start")
-        nestIconView.contentTintColor = NSColor.appleGreen
-        nestIconView.imageScaling = .scaleProportionallyUpOrDown
-        nestButtonContainer.addSubview(nestIconView)
+        voiceBarLabel = NSTextField(labelWithString: "Start")
+        voiceBarLabel.frame = NSRect(x: collapsedIconX + collapsedIconSize + 8, y: (vbHeight - 18) / 2, width: 60, height: 18)
+        voiceBarLabel.font = .systemFont(ofSize: 14, weight: .semibold)
+        voiceBarLabel.textColor = NSColor.white.withAlphaComponent(0.95)
+        voiceBarLabel.identifier = NSUserInterfaceItemIdentifier("nestStartLabel")
+        voiceBarContainer.addSubview(voiceBarLabel)
 
-        let startLabel = NSTextField(labelWithString: "Start")
-        startLabel.frame = NSRect(x: contentX + iconSize + gap, y: (pillHeight - 16) / 2, width: textWidth, height: 16)
-        startLabel.font = .systemFont(ofSize: 13, weight: .semibold)
-        startLabel.textColor = NSColor.white.withAlphaComponent(0.95)
-        startLabel.identifier = NSUserInterfaceItemIdentifier("nestStartLabel")
-        nestButtonContainer.addSubview(startLabel)
-
-        // Invisible button for click handling
-        voiceToggleButton = HoverButton(frame: NSRect(x: pillX, y: pillY, width: pillWidth, height: pillHeight))
+        // Main click area (covers whole pill in collapsed state)
+        voiceToggleButton = HoverButton(frame: NSRect(x: 5, y: vbY, width: voiceBarCollapsedWidth, height: vbHeight))
         voiceToggleButton.title = ""
         voiceToggleButton.isBordered = false
-        voiceToggleButton.bezelStyle = .regularSquare
         voiceToggleButton.target = self
-        voiceToggleButton.action = #selector(toggleInterview)
+        voiceToggleButton.action = #selector(toggleListening)
         voiceToggleButton.wantsLayer = true
         voiceToggleButton.layer?.backgroundColor = NSColor.clear.cgColor
         voiceControlBar.addSubview(voiceToggleButton)
+
+        // === EXPANDED STATE ELEMENTS (hidden initially) ===
+        // Left: Mic button for push-to-talk
+        let micBtnSize: CGFloat = 32
+        let micBtnX: CGFloat = 6
+        let micBtnY: CGFloat = (vbHeight - micBtnSize) / 2
+
+        voiceBarMicButton = NSView(frame: NSRect(x: micBtnX, y: micBtnY, width: micBtnSize, height: micBtnSize))
+        voiceBarMicButton.wantsLayer = true
+        voiceBarMicButton.layer?.cornerRadius = micBtnSize / 2
+        voiceBarMicButton.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.12).cgColor
+        voiceBarMicButton.alphaValue = 0
+        voiceBarContainer.addSubview(voiceBarMicButton)
+
+        let micIconSize: CGFloat = 16
+        voiceBarMicIcon = NSImageView(frame: NSRect(x: (micBtnSize - micIconSize) / 2, y: (micBtnSize - micIconSize) / 2, width: micIconSize, height: micIconSize))
+        voiceBarMicIcon.image = NSImage(systemSymbolName: "mic.fill", accessibilityDescription: "Push to talk")
+        voiceBarMicIcon.contentTintColor = NSColor.white.withAlphaComponent(0.9)
+        voiceBarMicIcon.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 14, weight: .medium)
+        voiceBarMicButton.addSubview(voiceBarMicIcon)
+
+        voiceBarMicClickArea = HoverButton(frame: NSRect(x: micBtnX, y: micBtnY, width: micBtnSize, height: micBtnSize))
+        voiceBarMicClickArea.title = ""
+        voiceBarMicClickArea.isBordered = false
+        voiceBarMicClickArea.target = self
+        voiceBarMicClickArea.action = #selector(toggleDirectQuestion)
+        voiceBarMicClickArea.wantsLayer = true
+        voiceBarMicClickArea.layer?.cornerRadius = micBtnSize / 2
+        voiceBarMicClickArea.toolTip = "Push to talk"
+        voiceBarMicClickArea.alphaValue = 0
+        voiceBarContainer.addSubview(voiceBarMicClickArea)
+
+        // Right: Stop button
+        let stopBtnSize: CGFloat = 32
+        let stopBtnX: CGFloat = voiceBarExpandedWidth - stopBtnSize - 6
+        let stopBtnY: CGFloat = (vbHeight - stopBtnSize) / 2
+
+        voiceBarSendButton = NSView(frame: NSRect(x: stopBtnX, y: stopBtnY, width: stopBtnSize, height: stopBtnSize))
+        voiceBarSendButton.wantsLayer = true
+        voiceBarSendButton.layer?.cornerRadius = stopBtnSize / 2
+        voiceBarSendButton.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.12).cgColor
+        voiceBarSendButton.alphaValue = 0
+        voiceBarContainer.addSubview(voiceBarSendButton)
+
+        let stopIconSize: CGFloat = 12
+        voiceBarSendIcon = NSImageView(frame: NSRect(x: (stopBtnSize - stopIconSize) / 2, y: (stopBtnSize - stopIconSize) / 2, width: stopIconSize, height: stopIconSize))
+        voiceBarSendIcon.image = NSImage(systemSymbolName: "stop.fill", accessibilityDescription: "Stop")
+        voiceBarSendIcon.contentTintColor = NSColor.white.withAlphaComponent(0.9)
+        voiceBarSendIcon.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 11, weight: .bold)
+        voiceBarSendButton.addSubview(voiceBarSendIcon)
+
+        voiceBarSendClickArea = HoverButton(frame: NSRect(x: stopBtnX, y: stopBtnY, width: stopBtnSize, height: stopBtnSize))
+        voiceBarSendClickArea.title = ""
+        voiceBarSendClickArea.isBordered = false
+        voiceBarSendClickArea.target = self
+        voiceBarSendClickArea.action = #selector(toggleListening)
+        voiceBarSendClickArea.wantsLayer = true
+        voiceBarSendClickArea.layer?.cornerRadius = stopBtnSize / 2
+        voiceBarSendClickArea.toolTip = "Stop"
+        voiceBarSendClickArea.alphaValue = 0
+        voiceBarContainer.addSubview(voiceBarSendClickArea)
+
+        // === WAVEFORM BARS (centered between mic and stop buttons) ===
+        let waveformBarCount = 25
+        let waveformBarWidth: CGFloat = 3
+        let waveformBarSpacing: CGFloat = 3
+        let waveformMaxHeight: CGFloat = 22
+        let waveformMinHeight: CGFloat = 4
+        // Calculate symmetric spacing: center waveform between mic button and stop button
+        let waveformTotalWidth = CGFloat(waveformBarCount) * waveformBarWidth + CGFloat(waveformBarCount - 1) * waveformBarSpacing
+        let micButtonEnd = micBtnX + micBtnSize  // 6 + 32 = 38
+        let stopButtonStart = stopBtnX          // 282
+        let availableSpace = stopButtonStart - micButtonEnd  // Space between buttons
+        let symmetricGap = (availableSpace - waveformTotalWidth) / 2
+        let waveformStartX: CGFloat = micButtonEnd + symmetricGap
+        let waveformCenterY: CGFloat = vbHeight / 2
+
+        voiceBarWaveformBars = []
+        for i in 0..<waveformBarCount {
+            let normalizedPos = abs(CGFloat(i) - CGFloat(waveformBarCount) / 2) / (CGFloat(waveformBarCount) / 2)
+            let initialMultiplier = 0.3 + 0.5 * (1 - normalizedPos)
+            let barHeight = waveformMinHeight + (waveformMaxHeight - waveformMinHeight) * initialMultiplier
+
+            let bar = NSView(frame: NSRect(
+                x: waveformStartX + CGFloat(i) * (waveformBarWidth + waveformBarSpacing),
+                y: waveformCenterY - barHeight / 2,
+                width: waveformBarWidth,
+                height: barHeight
+            ))
+            bar.wantsLayer = true
+            bar.layer?.cornerRadius = waveformBarWidth / 2
+            bar.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.6).cgColor
+            bar.alphaValue = 0
+            voiceBarContainer.addSubview(bar)
+            voiceBarWaveformBars.append(bar)
+        }
+
+        // Legacy compatibility references
+        nestButtonContainer = voiceBarContainer
+        nestButtonInner = voiceBarInner
+        askButtonContainer = voiceBarMicButton
+        askButtonInner = voiceBarMicButton.layer!
+        askIconView = voiceBarMicIcon
+        askButton = voiceBarMicClickArea
 
         // Export button - pill style matching Start button
         let exportWidth: CGFloat = 95
@@ -1136,52 +1613,19 @@ The function uses a **hash map** for `O(n)` time complexity.
         exportButton.isBordered = false
         exportButton.bezelStyle = .regularSquare
         exportButton.target = self
-        exportButton.action = #selector(exportInterview)
+        exportButton.action = #selector(exportSession)
         exportButton.wantsLayer = true
         exportButton.layer?.backgroundColor = NSColor.clear.cgColor
         voiceControlBar.addSubview(exportButton)
 
-        // Audio indicators with mini waveform bars (5 bars for richer animation)
-        let barCount = 5
-        let barWidth: CGFloat = 2.5
-        let barSpacing: CGFloat = 1.5
-        let barMaxHeight: CGFloat = 14
-        let barMinHeight: CGFloat = 3
-        let indicatorX: CGFloat = 160  // Moved closer since no background box
-        let indicatorY: CGFloat = (55 - 18) / 2  // Centered vertically
-        // Varying initial heights for visual interest
-        let initialHeights: [CGFloat] = [0.4, 0.7, 1.0, 0.7, 0.4]
-
-        // Interviewer indicator - icon + waveform
-        let sysIconView = NSImageView(frame: NSRect(x: indicatorX, y: indicatorY, width: 18, height: 18))
-        sysIconView.image = NSImage(systemSymbolName: "person.fill", accessibilityDescription: "Interviewer")
-        sysIconView.contentTintColor = NSColor.appleGold.withAlphaComponent(0.9)
-        sysIconView.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 12, weight: .medium)
-        voiceControlBar.addSubview(sysIconView)
+        // System waveform bars now integrated into voice bar
+        // Use the voice bar waveform bars as the primary audio visualization
+        systemWaveformBars = voiceBarWaveformBars
 
         // Hidden label for compatibility
         systemIndicatorLabel = NSTextField(labelWithString: "")
         systemIndicatorLabel.isHidden = true
         voiceControlBar.addSubview(systemIndicatorLabel)
-
-        // System waveform bars (gold - interviewer)
-        let sysBarX = indicatorX + 22
-        let barsY = (55 - barMaxHeight) / 2  // Centered vertically
-        for i in 0..<barCount {
-            let heightMultiplier = initialHeights[i]
-            let barHeight = barMinHeight + (barMaxHeight - barMinHeight) * heightMultiplier * 0.3
-            let bar = NSView(frame: NSRect(
-                x: sysBarX + CGFloat(i) * (barWidth + barSpacing),
-                y: barsY + (barMaxHeight - barHeight) / 2,
-                width: barWidth,
-                height: barHeight
-            ))
-            bar.wantsLayer = true
-            bar.layer?.cornerRadius = barWidth / 2
-            bar.layer?.backgroundColor = NSColor.appleGold.withAlphaComponent(0.7).cgColor
-            voiceControlBar.addSubview(bar)
-            systemWaveformBars.append(bar)
-        }
 
 
         // Hidden status label (used for status updates internally)
@@ -1269,9 +1713,73 @@ The function uses a **hash map** for `O(n)` time complexity.
         // Ensure scroll view responds to scroll events
         pinnedSolutionScrollView.scrollsDynamically = true
 
-        // Timeline scroll view (positioned below pinned solution)
-        let timelineY: CGFloat = 15
-        let timelineHeight = voiceContentView.frame.height - 80
+        // === PROMPT INPUT FIELD (pill-styled at bottom) ===
+        let promptHeight: CGFloat = 44
+        let promptY: CGFloat = 10
+        let promptPadding: CGFloat = 15
+        
+        promptInputContainer = NSView(frame: NSRect(x: promptPadding, y: promptY, width: voiceContentView.frame.width - (promptPadding * 2), height: promptHeight))
+        promptInputContainer.autoresizingMask = [.width, .maxYMargin]
+        promptInputContainer.wantsLayer = true
+        promptInputContainer.layer?.cornerRadius = promptHeight / 2  // Capsule shape
+        promptInputContainer.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.08).cgColor
+        promptInputContainer.layer?.borderWidth = 1
+        promptInputContainer.layer?.borderColor = NSColor.white.withAlphaComponent(0.25).cgColor
+        voiceContentView.addSubview(promptInputContainer)
+        
+        // Text input field
+        let inputLeftPadding: CGFloat = 20
+        let sendButtonSize: CGFloat = 32
+        let inputRightPadding: CGFloat = 12
+        let inputWidth = promptInputContainer.frame.width - inputLeftPadding - sendButtonSize - inputRightPadding - 8
+        
+        promptInputField = NSTextField(frame: NSRect(x: inputLeftPadding, y: (promptHeight - 24) / 2, width: inputWidth, height: 24))
+        promptInputField.autoresizingMask = [.width]
+        promptInputField.placeholderString = "Ask Claude anything..."
+        promptInputField.font = .systemFont(ofSize: 14, weight: .regular)
+        promptInputField.textColor = NSColor.white
+        promptInputField.backgroundColor = .clear
+        promptInputField.isBordered = false
+        promptInputField.focusRingType = .none
+        promptInputField.cell?.wraps = false
+        promptInputField.cell?.isScrollable = true
+        promptInputField.target = self
+        promptInputField.action = #selector(sendPromptFromInput)
+        promptInputContainer.addSubview(promptInputField)
+        
+        // Send button (circular, right side)
+        let sendBtnX = promptInputContainer.frame.width - sendButtonSize - inputRightPadding
+        let sendBtnY = (promptHeight - sendButtonSize) / 2
+        
+        let sendButtonBg = NSView(frame: NSRect(x: sendBtnX, y: sendBtnY, width: sendButtonSize, height: sendButtonSize))
+        sendButtonBg.autoresizingMask = [.minXMargin]
+        sendButtonBg.wantsLayer = true
+        sendButtonBg.layer?.cornerRadius = sendButtonSize / 2
+        sendButtonBg.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.12).cgColor
+        promptInputContainer.addSubview(sendButtonBg)
+        
+        let sendIconSize: CGFloat = 14
+        promptSendIcon = NSImageView(frame: NSRect(x: (sendButtonSize - sendIconSize) / 2, y: (sendButtonSize - sendIconSize) / 2, width: sendIconSize, height: sendIconSize))
+        promptSendIcon.wantsLayer = true
+        promptSendIcon.image = NSImage(systemSymbolName: "arrow.up", accessibilityDescription: "Send")
+        promptSendIcon.contentTintColor = NSColor.white.withAlphaComponent(0.9)
+        promptSendIcon.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 12, weight: .semibold)
+        sendButtonBg.addSubview(promptSendIcon)
+        
+        promptSendButton = HoverButton(frame: NSRect(x: sendBtnX, y: sendBtnY, width: sendButtonSize, height: sendButtonSize))
+        promptSendButton.autoresizingMask = [.minXMargin]
+        promptSendButton.title = ""
+        promptSendButton.isBordered = false
+        promptSendButton.target = self
+        promptSendButton.action = #selector(sendPromptFromInput)
+        promptSendButton.wantsLayer = true
+        promptSendButton.layer?.cornerRadius = sendButtonSize / 2
+        promptSendButton.toolTip = "Send message"
+        promptInputContainer.addSubview(promptSendButton)
+
+        // Timeline scroll view (positioned above prompt input)
+        let timelineY: CGFloat = promptY + promptHeight + 10  // Above the input field
+        let timelineHeight = voiceContentView.frame.height - 80 - promptHeight - 10  // Reduced for input field
         voiceTimelineScrollView = NSScrollView(frame: NSRect(x: 15, y: timelineY, width: voiceContentView.frame.width - 30, height: timelineHeight))
         voiceTimelineScrollView.autoresizingMask = [.width, .height]
         voiceTimelineScrollView.hasVerticalScroller = true
@@ -1285,7 +1793,7 @@ The function uses a **hash map** for `O(n)` time complexity.
         voiceTimelineScrollView.documentView = voiceTimelineContainer
 
         // Empty state / Welcome message with friendly styling
-        addVoiceMessage(type: .status, content: "Interview Assistant Ready\n\nClick Start Interview to begin listening.", topic: nil)
+        addVoiceMessage(type: .status, content: "Ready to help\n\nType a message or click Start to begin listening.", topic: nil)
 
         voiceContentView.addSubview(voiceTimelineScrollView)
 
@@ -1328,17 +1836,9 @@ The function uses a **hash map** for `O(n)` time complexity.
         searchResultsLabel.alignment = .right
         searchContainer.addSubview(searchResultsLabel)
 
-        // Bottom status bar - minimal design with API status indicators
-        statusBar = NSVisualEffectView(frame: NSRect(x: 20, y: 15, width: contentView.frame.width - 40, height: 28))
+        // Bottom status bar - transparent container for layout only (no background)
+        statusBar = NSView(frame: NSRect(x: 20, y: 15, width: contentView.frame.width - 40, height: 28))
         statusBar.autoresizingMask = [.width, .maxYMargin]
-        statusBar.blendingMode = .withinWindow
-        statusBar.material = .menu
-        statusBar.state = .active
-        statusBar.alphaValue = 0.6
-        statusBar.wantsLayer = true
-        statusBar.layer?.cornerRadius = 8
-        statusBar.layer?.borderWidth = 1.0
-        statusBar.layer?.borderColor = NSColor.white.withAlphaComponent(0.1).cgColor
         contentView.addSubview(statusBar)
 
         // Claude status indicator
@@ -1384,17 +1884,56 @@ The function uses a **hash map** for `O(n)` time complexity.
         groqLabel.font = .systemFont(ofSize: 10, weight: .medium)
         groqLabel.textColor = NSColor.white.withAlphaComponent(0.6)
         statusBar.addSubview(groqLabel)
-        
-        // Settings button on the right
-        let settingsBtn = NSButton(frame: NSRect(x: statusBar.frame.width - 70, y: 4, width: 60, height: 20))
+
+        // Tools container (will be populated dynamically for other tools)
+        toolsContainer = NSStackView(frame: NSRect(x: 175, y: 4, width: 40, height: 20))
+        toolsContainer.orientation = .horizontal
+        toolsContainer.spacing = 10
+        toolsContainer.alignment = .centerY
+        toolsContainer.distribution = .fill
+        statusBar.addSubview(toolsContainer)
+
+        // Connection buttons - positioned after Groq with spacing
+        let connBtnStart: CGFloat = 180  // Start after Groq label
+        let connBtnSpacing: CGFloat = 12
+        var currentX = connBtnStart
+
+        // Confluence button
+        confluenceButton = ConnectionButton(frame: NSRect(x: currentX, y: 1, width: 100, height: 26))
+        confluenceButton.configure(icon: "book.closed.fill", label: "Confluence", accent: .systemBlue)
+        confluenceButton.target = self
+        confluenceButton.action = #selector(confluenceIndicatorClicked)
+        confluenceButton.toolTip = "Click to connect Confluence"
+        statusBar.addSubview(confluenceButton)
+        currentX += confluenceButton.frame.width + connBtnSpacing
+
+        // Jira button
+        jiraButton = ConnectionButton(frame: NSRect(x: currentX, y: 1, width: 60, height: 26))
+        jiraButton.configure(icon: "ticket.fill", label: "Jira", accent: .systemBlue)
+        jiraButton.target = self
+        jiraButton.action = #selector(jiraIndicatorClicked)
+        jiraButton.toolTip = "Click to connect Jira"
+        statusBar.addSubview(jiraButton)
+        currentX += jiraButton.frame.width + connBtnSpacing
+
+        // GitHub button
+        githubButton = ConnectionButton(frame: NSRect(x: currentX, y: 1, width: 80, height: 26))
+        githubButton.configure(icon: "chevron.left.forwardslash.chevron.right", label: "GitHub", accent: .systemPurple)
+        githubButton.target = self
+        githubButton.action = #selector(githubIndicatorClicked)
+        githubButton.toolTip = "Click to connect GitHub"
+        statusBar.addSubview(githubButton)
+
+        // Settings button (far right)
+        let settingsBtn = NSButton(frame: NSRect(x: statusBar.frame.width - 36, y: 0, width: 28, height: 28))
         settingsBtn.autoresizingMask = [.minXMargin]
         settingsBtn.title = ""
-        settingsBtn.image = NSImage(systemSymbolName: "gearshape", accessibilityDescription: "Settings")
+        settingsBtn.image = NSImage(systemSymbolName: "gearshape.fill", accessibilityDescription: "Settings")
         settingsBtn.imagePosition = .imageOnly
         settingsBtn.bezelStyle = .inline
         settingsBtn.isBordered = false
-        settingsBtn.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 11, weight: .medium)
-        settingsBtn.contentTintColor = NSColor.white.withAlphaComponent(0.5)
+        settingsBtn.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 16, weight: .medium)
+        settingsBtn.contentTintColor = NSColor.white.withAlphaComponent(0.6)
         settingsBtn.target = self
         settingsBtn.action = #selector(showSettings)
         statusBar.addSubview(settingsBtn)
@@ -1585,7 +2124,9 @@ The function uses a **hash map** for `O(n)` time complexity.
     // MARK: - Recording Indicator (Dynamic Island Style)
     
     /// Show the recording pill with expand animation
+    /// NOTE: Disabled - recording time now shown in voice bar
     func showRecordingIndicator() {
+        return  // Recording indicator disabled - using voice bar instead
         recordingStartTime = Date()
         recordingPill.isHidden = false
 
@@ -1681,16 +2222,81 @@ The function uses a **hash map** for `O(n)` time complexity.
     func updateStatusBarIndicators() {
         let hasAnthropic = ApiKeyManager.shared.hasKey(.anthropic)
         let hasGroq = ApiKeyManager.shared.hasKey(.groq)
-        
+        let hasConfluence = ConfluenceClient.shared.isConfigured
+        let hasJira = JiraClient.shared.isConfigured
+        let hasGitHub = GitHubClient.shared.isConfigured
+
+        let greenColor = NSColor(red: 0.204, green: 0.780, blue: 0.349, alpha: 1.0).cgColor
+        let orangeColor = NSColor(red: 1.0, green: 0.6, blue: 0.0, alpha: 1.0).cgColor
+
+        // Update API status dots (Anthropic, Groq)
         NSAnimationContext.runAnimationGroup({ context in
             context.duration = 0.3
-            anthropicStatusDot.layer?.backgroundColor = hasAnthropic 
-                ? NSColor(red: 0.204, green: 0.780, blue: 0.349, alpha: 1.0).cgColor 
-                : NSColor(red: 1.0, green: 0.6, blue: 0.0, alpha: 1.0).cgColor
-            groqStatusDot.layer?.backgroundColor = hasGroq 
-                ? NSColor(red: 0.204, green: 0.780, blue: 0.349, alpha: 1.0).cgColor 
-                : NSColor(red: 1.0, green: 0.6, blue: 0.0, alpha: 1.0).cgColor
+            anthropicStatusDot.layer?.backgroundColor = hasAnthropic ? greenColor : orangeColor
+            groqStatusDot.layer?.backgroundColor = hasGroq ? greenColor : orangeColor
         })
+
+        // Update connection buttons (Confluence, Jira, GitHub)
+        confluenceButton.isConnected = hasConfluence
+        jiraButton.isConnected = hasJira
+        githubButton.isConnected = hasGitHub
+
+        // Update tooltips based on connection state
+        updateToolTips()
+
+        // Update tools container (for other tools like Database, WebSearch - excluding GitHub which has dedicated indicator)
+        updateToolsIndicators()
+    }
+
+    /// Update the tools section in status bar (for tools other than Confluence/Jira/GitHub which have dedicated indicators)
+    func updateToolsIndicators() {
+        // Clear existing tool indicators
+        toolsContainer.arrangedSubviews.forEach { $0.removeFromSuperview() }
+
+        // Tool icons mapping
+        let toolIcons: [String: String] = [
+            "query_database": "cylinder.split.1x2",               // Database
+            "web_search": "globe"                                 // Web Search
+        ]
+
+        // Tools to show in container (exclude Confluence, Jira, and GitHub which have dedicated indicators)
+        let excludedTools = ["search_documentation", "search_jira", "search_codebase"]
+        let toolStatus = ToolExecutor.shared.toolStatus
+        let configuredTools = toolStatus.filter { $0.isConfigured && !excludedTools.contains($0.name) }
+
+        for tool in configuredTools {
+            // Create container for each tool
+            let toolView = NSView(frame: NSRect(x: 0, y: 0, width: 50, height: 20))
+
+            // Tool icon
+            let iconName = toolIcons[tool.name] ?? "wrench"
+            let icon = NSImageView(frame: NSRect(x: 0, y: 3, width: 14, height: 14))
+            icon.image = NSImage(systemSymbolName: iconName, accessibilityDescription: tool.displayName)
+            icon.contentTintColor = NSColor.white.withAlphaComponent(0.7)
+            icon.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 10, weight: .medium)
+            toolView.addSubview(icon)
+
+            // Status dot (green = configured)
+            let dot = NSView(frame: NSRect(x: 16, y: 7, width: 6, height: 6))
+            dot.wantsLayer = true
+            dot.layer?.cornerRadius = 3
+            dot.layer?.backgroundColor = NSColor(red: 0.204, green: 0.780, blue: 0.349, alpha: 1.0).cgColor
+            toolView.addSubview(dot)
+
+            // Tool label (short name)
+            let label = NSTextField(labelWithString: tool.displayName)
+            label.frame = NSRect(x: 24, y: 3, width: 60, height: 14)
+            label.font = .systemFont(ofSize: 10, weight: .medium)
+            label.textColor = NSColor.white.withAlphaComponent(0.6)
+            label.lineBreakMode = .byTruncatingTail
+            toolView.addSubview(label)
+
+            // Set width based on label
+            let labelWidth = label.intrinsicContentSize.width
+            toolView.frame.size.width = min(24 + labelWidth, 80)
+
+            toolsContainer.addArrangedSubview(toolView)
+        }
     }
 
     // Voice search feature removed - not working correctly
@@ -1945,8 +2551,11 @@ The function uses a **hash map** for `O(n)` time complexity.
                 self.window.orderOut(nil)
                 self.window.alphaValue = 1
 
-                // Hide from dock when window is hidden
-                NSApp.setActivationPolicy(.accessory)
+                // Hide Settings window with main window
+                self.settingsWindowController?.window?.orderOut(nil)
+
+                // Keep visible in dock
+                NSApp.setActivationPolicy(.regular)
 
                 // Show floating solution if there's a pinned solution
                 if self.currentPinnedSolution != nil {
@@ -2298,8 +2907,8 @@ The function uses a **hash map** for `O(n)` time complexity.
     /// Get the last question and answer from voice messages
     func getLastQuestionAnswer() -> (question: String, answer: String)? {
         // Find the last answer that's not a status message
-        var lastAnswer: InterviewMessage?
-        var lastQuestion: InterviewMessage?
+        var lastAnswer: ConversationMessage?
+        var lastQuestion: ConversationMessage?
 
         for message in voiceMessages.reversed() {
             if lastAnswer == nil && (message.type == .answer || message.type == .followUp) {
@@ -2734,8 +3343,8 @@ The function uses a **hash map** for `O(n)` time complexity.
     }
 
     @objc func captureScreenshotPlaceholder() {
-        // Only allow screenshots during active interview
-        guard isInterviewActive else {
+        // Only allow screenshots during active session
+        guard isSessionActive else {
             return
         }
 
@@ -2753,7 +3362,7 @@ The function uses a **hash map** for `O(n)` time complexity.
     func showPermissionAlert() {
         let alert = NSAlert()
         alert.messageText = "Screen Recording Permission Required"
-        alert.informativeText = "Interview Master needs Screen Recording permission to capture screenshots.\n\n1. Click 'Open Settings' below\n2. Enable 'InterviewMaster' in Screen Recording\n3. Restart the app"
+        alert.informativeText = "Conversation Assistant needs Screen Recording permission to capture screenshots.\n\n1. Click 'Open Settings' below\n2. Enable 'ConversationAssistant' in Screen Recording\n3. Restart the app"
         alert.alertStyle = .warning
         alert.addButton(withTitle: "Open Settings")
         alert.addButton(withTitle: "Cancel")
@@ -2877,7 +3486,7 @@ The function uses a **hash map** for `O(n)` time complexity.
         let alert = NSAlert()
         alert.messageText = "Data Sharing Consent"
         alert.informativeText = """
-        To analyze your screenshots, Interview Master will send them to Anthropic's Claude AI service.
+        To analyze your screenshots, Conversation Assistant will send them to Anthropic's Claude AI service.
 
         What is shared:
         • Screenshot images you capture
@@ -2931,13 +3540,18 @@ The function uses a **hash map** for `O(n)` time complexity.
         // Get prompt from analysis mode
         let prompt = analysisMode.prompt
 
+        // Get conversation history for context
+        let conversationHistory = conversationContext.getFullConversation()
+        let contextForAPI = conversationHistory.isEmpty ? nil : conversationHistory
+
         // Collect full response for pinning
         var fullResponse = ""
 
         // Stream the response directly to pinned solution
         let result = await client.sendMessageStream(
             images: base64Images,
-            prompt: prompt
+            prompt: prompt,
+            conversationContext: contextForAPI
         ) { [weak self] chunk in
             fullResponse += chunk
             Task { @MainActor in
@@ -3072,9 +3686,70 @@ The function uses a **hash map** for `O(n)` time complexity.
         if settingsWindowController == nil {
             settingsWindowController = SettingsWindowController.create()
         }
-        settingsWindowController?.showWindow(self)
-        settingsWindowController?.window?.makeKeyAndOrderFront(self)
+
+        // Ensure window appears on top
+        if let settingsWindow = settingsWindowController?.window {
+            settingsWindow.orderFrontRegardless()
+            settingsWindow.makeKey()
+        }
         NSApp.activate(ignoringOtherApps: true)
+    }
+
+    // MARK: - Data Source Indicator Click Handlers
+
+    @objc func confluenceIndicatorClicked() {
+        if OAuthManager.shared.isConnected(provider: .atlassian) {
+            // Show disconnect confirmation
+            showDisconnectAlert(for: .atlassian)
+        } else {
+            // Start OAuth flow
+            OAuthManager.shared.startOAuthFlow(for: .atlassian)
+        }
+    }
+
+    @objc func jiraIndicatorClicked() {
+        // Jira uses same Atlassian OAuth as Confluence
+        if OAuthManager.shared.isConnected(provider: .atlassian) {
+            showDisconnectAlert(for: .atlassian)
+        } else {
+            OAuthManager.shared.startOAuthFlow(for: .atlassian)
+        }
+    }
+
+    @objc func githubIndicatorClicked() {
+        print("[GitHub] githubIndicatorClicked called!")
+        NSLog("GitHub button clicked!")
+        if OAuthManager.shared.isConnected(provider: .github) {
+            print("[GitHub] Already connected, showing disconnect")
+            showDisconnectAlert(for: .github)
+        } else {
+            print("[GitHub] Not connected, starting OAuth flow")
+            OAuthManager.shared.startOAuthFlow(for: .github)
+        }
+    }
+
+    private func showDisconnectAlert(for provider: OAuthProvider) {
+        let alert = NSAlert()
+        alert.messageText = "Disconnect \(provider.displayName)?"
+        alert.informativeText = "This will remove your OAuth connection. You can reconnect anytime by clicking the indicator again."
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "Disconnect")
+        alert.addButton(withTitle: "Cancel")
+
+        if alert.runModal() == .alertFirstButtonReturn {
+            OAuthManager.shared.disconnect(provider: provider)
+            updateStatusBarIndicators()
+            updateToolTips()
+        }
+    }
+
+    private func updateToolTips() {
+        let isAtlassianConnected = OAuthManager.shared.isConnected(provider: .atlassian)
+        confluenceButton.toolTip = isAtlassianConnected ? "Click to disconnect Confluence" : "Click to connect Confluence"
+        jiraButton.toolTip = isAtlassianConnected ? "Click to disconnect Jira" : "Click to connect Jira"
+
+        let isGitHubConnected = OAuthManager.shared.isConnected(provider: .github)
+        githubButton.toolTip = isGitHubConnected ? "Click to disconnect GitHub" : "Click to connect GitHub"
     }
 
     func maskApiKey(_ key: String) -> String {
@@ -3089,6 +3764,22 @@ The function uses a **hash map** for `O(n)` time complexity.
             NSEvent.removeMonitor(monitor)
         }
         screenshotMonitorTimer?.invalidate()
+    }
+
+    // MARK: - OAuth URL Handling
+
+    func application(_ application: NSApplication, open urls: [URL]) {
+        for url in urls {
+            if url.scheme == OAuthConfig.urlScheme {
+                NSLog("App: Received OAuth callback: \(url)")
+                OAuthManager.shared.handleCallback(url)
+
+                // Bring Settings window to front if open
+                if let settingsWindow = settingsWindowController?.window, settingsWindow.isVisible {
+                    settingsWindow.makeKeyAndOrderFront(nil)
+                }
+            }
+        }
     }
 
     // MARK: - Screenshot Alert System
@@ -3178,7 +3869,7 @@ The function uses a **hash map** for `O(n)` time complexity.
         panel.addSubview(title)
 
         // Subtitle
-        let subtitle = NSTextField(labelWithString: "Complete the following steps to use Interview Master")
+        let subtitle = NSTextField(labelWithString: "Complete the following steps to use Conversation Assistant")
         subtitle.frame = NSRect(x: 40, y: panel.frame.height - 88, width: panel.frame.width - 80, height: 20)
         subtitle.font = .systemFont(ofSize: 13, weight: .regular)
         subtitle.textColor = NSColor.white.withAlphaComponent(0.75)
@@ -3191,7 +3882,7 @@ The function uses a **hash map** for `O(n)` time complexity.
             yOffset: panel.frame.height - 175,
             icon: "📸",
             title: "Screen Recording",
-            description: "Capture coding problems during interviews",
+            description: "Capture screenshots during sessions",
             buttonTitle: "Open Settings",
             action: #selector(openScreenRecordingSettings),
             isScreenRecording: true
@@ -3311,17 +4002,17 @@ The function uses a **hash map** for `O(n)` time complexity.
         permissionCheckTimer = nil
     }
 
-    // MARK: - Voice Interview Methods
+    // MARK: - Voice Session Methods
 
-    @objc func toggleInterview() {
-        if isInterviewActive {
-            stopInterview()
+    @objc func toggleListening() {
+        if isSessionActive {
+            stopListening()
         } else {
-            startInterview()
+            startListening()
         }
     }
 
-    func startInterview() {
+    func startListening() {
         // Check for Groq API key
         if groqApiKey == nil {
             promptForGroqApiKey()
@@ -3337,50 +4028,60 @@ The function uses a **hash map** for `O(n)` time complexity.
         // Initialize recorder and clients
         vadRecorder = VADAudioRecorder()
         systemAudioCapture = SystemAudioCapture()
-        groqClient = GroqInterviewClient(apiKey: groqApiKey!)
+        groqClient = GroqSpeechClient(apiKey: groqApiKey!)
         anthropicClient = AnthropicClient(apiKey: apiKey!)
 
-        // Mic callbacks disabled - only using system audio
-        // vadRecorder?.onLevelUpdate = { ... }
-        // vadRecorder?.onStatusChange = { ... }
-        // vadRecorder?.onSpeechSegment = { ... }
-
-        // Set up system audio capture (for interviewer's voice in Zoom/Teams)
-        systemAudioCapture?.onStatusChange = { [weak self] status in
+        // === USER MIC CALLBACKS (your voice) ===
+        vadRecorder?.onLevelUpdate = { [weak self] db, isSpeaking in
             guard let self = self else { return }
-            NSLog("🔊 System: %@", status)
+            DispatchQueue.main.async {
+                self.pulseMicIcon(isSpeaking: isSpeaking, db: db)
+            }
+        }
+
+        vadRecorder?.onStatusChange = { [weak self] _ in
+            // Status updates disabled - UI shows visual feedback
+        }
+
+        vadRecorder?.onSpeechSegment = { [weak self] audioData in
+            guard let self = self else { return }
+            self.processAudioSegment(audioData, source: .microphone)
+        }
+
+        // === SYSTEM AUDIO CALLBACKS (what you hear - Zoom/Teams) ===
+        systemAudioCapture?.onStatusChange = { [weak self] _ in
+            // Status updates disabled - UI shows visual feedback
         }
 
         systemAudioCapture?.onLevelUpdate = { [weak self] db, isSpeaking in
             guard let self = self else { return }
             DispatchQueue.main.async {
                 self.animateWaveform(bars: self.systemWaveformBars, color: .appleGold, isSpeaking: isSpeaking, db: db)
+                // Pulse the speaker icon when system audio is detected
+                self.pulseSpeakerIcon(isSpeaking: isSpeaking, db: db)
             }
         }
 
         systemAudioCapture?.onSpeechSegment = { [weak self] audioData in
             guard let self = self else { return }
-            NSLog("🔊 System audio segment received: %d bytes", audioData.count)
             self.processAudioSegment(audioData, source: .systemAudio)
         }
 
-        // Start listening
+        // Start listening to BOTH audio sources
         do {
-            // Mic disabled - only using system audio (Zoom/Teams)
-            // try vadRecorder?.startListening()
+            // Start user mic capture
+            try vadRecorder?.startListening()
 
             // Start system audio capture in background
             Task {
                 do {
                     try await systemAudioCapture?.startCapturing()
-                    NSLog("🔊 System audio capture started")
                 } catch {
-                    NSLog("⚠️ System audio capture failed: %@", error.localizedDescription)
-                    // Continue without system audio - mic still works
+                    // System audio optional - mic still works
                 }
             }
 
-            isInterviewActive = true
+            isSessionActive = true
 
             // Clear screenshots array for new session
             screenshots.removeAll()
@@ -3395,14 +4096,14 @@ The function uses a **hash map** for `O(n)` time complexity.
             // Show recording indicator (Dynamic Island style)
             showRecordingIndicator()
 
-            addVoiceMessage(type: .status, content: "Interview started - listening for questions...", topic: nil)
+            addVoiceMessage(type: .status, content: "Listening...", topic: nil)
 
         } catch {
             showAlert(title: "Audio Error", message: "Could not start audio recording: \(error.localizedDescription)")
         }
     }
 
-    func stopInterview() {
+    func stopListening() {
         vadRecorder?.stopListening()
         vadRecorder = nil
 
@@ -3414,7 +4115,7 @@ The function uses a **hash map** for `O(n)` time complexity.
             }
         }
 
-        isInterviewActive = false
+        isSessionActive = false
 
         // Clear conversation context but keep timeline visible
         conversationContext.clear()
@@ -3430,13 +4131,435 @@ The function uses a **hash map** for `O(n)` time complexity.
         updateNestButtonState(recording: false)
 
         voiceStatusLabel.stringValue = ""
-        // Reset waveform bars to dim state
-        for bar in systemWaveformBars {
-            bar.layer?.backgroundColor = NSColor.appleGold.withAlphaComponent(0.5).cgColor
-        }
+        // Waveform bars reset handled by updateNestButtonState collapse animation
 
         // Add status to timeline (preserved)
-        addVoiceMessage(type: .status, content: "Interview stopped", topic: nil)
+        addVoiceMessage(type: .status, content: "Session ended", topic: nil)
+    }
+
+    // MARK: - Text Prompt Input
+
+    @objc func sendPromptFromInput() {
+        let prompt = promptInputField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !prompt.isEmpty else { return }
+        guard !isPromptProcessing else { return }  // Prevent double-send
+
+        // Check for API key
+        guard let anthropicKey = apiKey else {
+            showAlert(title: "API Key Required", message: "Please configure your Anthropic API key in Settings (⌘,)")
+            return
+        }
+
+        // Set loading state
+        isPromptProcessing = true
+        let originalPlaceholder = promptInputField.placeholderString
+        promptInputField.stringValue = ""
+        promptInputField.placeholderString = "Thinking..."
+        promptInputField.isEnabled = false
+        promptSendButton.isEnabled = false
+        
+        // Animate send icon to loading spinner
+        promptSendIcon.image = NSImage(systemSymbolName: "circle.dotted", accessibilityDescription: "Loading")
+        startPromptLoadingAnimation()
+
+        // Add user message to timeline
+        addVoiceMessage(type: .question, content: prompt, topic: nil)
+
+        // Create streaming answer container
+        addStreamingMessage(type: .answer, topic: nil)
+        streamingContent = ""
+
+        // Process with Claude using chatWithTools
+        Task {
+            let client = AnthropicClient(apiKey: anthropicKey)
+
+            // Build user context from OAuth data
+            var userContext = ""
+            let displayName = DataSourceConfig.shared.getValue(for: .confluence, field: "userDisplayName")
+            let email = DataSourceConfig.shared.getValue(for: .confluence, field: "userEmail")
+
+            if let displayName = displayName {
+                userContext = "\nCONNECTED USER: \(displayName)\(email.map { " (\($0))" } ?? "")\n"
+            } else if let email = email {
+                userContext = "\nCONNECTED USER: \(email)\n"
+            }
+
+            // Get conversation history for context
+            let conversationHistory = conversationContext.getFullConversation()
+            let historyContext = conversationHistory.isEmpty ? "" : """
+
+            CONVERSATION SO FAR:
+            \(conversationHistory)
+            """
+
+            // Build system prompt
+            let systemPrompt = """
+            You are a fast, action-oriented assistant with access to work tools.
+            \(userContext)
+            TOOL ROUTING (use immediately, don't ask):
+            • Ticket key (PROJ-123) → search_jira (returns full ticket details)
+            • Sprint/my tickets/work items → search_jira
+            • Docs/process/how-to → search_documentation
+            • Code/PRs/issues → search_codebase (detects "PR", "issue", "bug" keywords)
+            • External info → web_search (last resort)
+
+            MULTI-TOOL STRATEGY:
+            • Use MULTIPLE tools when helpful (e.g., Jira + GitHub for feature status)
+            • Cross-reference: ticket mentions code? search_codebase too
+            • If first tool returns nothing, try another before giving up
+
+            RESPONSE RULES:
+            1. NEVER ask clarifying questions - search with reasonable defaults
+            2. ALWAYS include clickable URLs from results
+            3. Be concise: 3-5 bullet points, cite sources
+            4. When user says "it"/"that", check CONVERSATION SO FAR
+            \(historyContext)
+            Tech stack: \(AppSettings.shared.techStack.displayName)
+            """
+
+            // Use chatWithTools for tool support
+            let configuredTools = ToolExecutor.shared.configuredToolDefinitions
+
+            let result = await client.chatWithTools(
+                question: prompt,
+                tools: configuredTools,
+                systemPrompt: systemPrompt,
+                conversationHistory: self.chatHistory,  // Pass multi-turn history
+                onToolUse: { [weak self] toolName in
+                    DispatchQueue.main.async {
+                        let icon = ToolExecutor.shared.icon(for: toolName)
+                        let displayName = ToolExecutor.shared.displayName(for: toolName)
+                        // Update streaming status instead of adding separate message
+                        self?.updateStreamingStatus("\(icon) Searching \(displayName)...")
+                    }
+                },
+                onChunk: { [weak self] chunk in
+                    DispatchQueue.main.async {
+                        self?.streamingContent += chunk
+                        if let content = self?.streamingContent {
+                            self?.updateStreamingMessage(content)
+                        }
+                    }
+                }
+            )
+
+            // Handle result
+            await MainActor.run { [weak self] in
+                guard let self = self else { return }
+
+                switch result {
+                case .success(let answer):
+                    // Add to multi-turn chat history (native Claude format)
+                    self.chatHistory.addUser(prompt)
+                    self.chatHistory.addAssistant(answer)
+                    // Also add to legacy context for other flows
+                    self.conversationContext.addUtterance(text: prompt, topic: nil, isQuestion: true)
+                    self.conversationContext.addUtterance(text: answer, topic: nil, isQuestion: false)
+                    self.finalizeStreamingMessage(answer)
+                case .failure(let error):
+                    self.finalizeStreamingMessage("Error: \(error.localizedDescription)")
+                }
+
+                // Reset loading state
+                self.isPromptProcessing = false
+                self.promptInputField.placeholderString = originalPlaceholder
+                self.promptInputField.isEnabled = true
+                self.promptSendButton.isEnabled = true
+                self.stopPromptLoadingAnimation()
+                self.promptSendIcon.image = NSImage(systemSymbolName: "arrow.up", accessibilityDescription: "Send")
+            }
+        }
+    }
+    
+    private func startPromptLoadingAnimation() {
+        // Rotate the loading icon
+        let rotation = CABasicAnimation(keyPath: "transform.rotation.z")
+        rotation.fromValue = 0
+        rotation.toValue = CGFloat.pi * 2
+        rotation.duration = 1.0
+        rotation.repeatCount = .infinity
+        promptSendIcon.layer?.add(rotation, forKey: "loadingRotation")
+    }
+    
+    private func stopPromptLoadingAnimation() {
+        promptSendIcon.layer?.removeAnimation(forKey: "loadingRotation")
+    }
+
+    // MARK: - Direct Question (Ask Button)
+
+    @objc func toggleDirectQuestion() {
+        if isAskingDirectQuestion {
+            cancelDirectQuestion()
+        } else {
+            startDirectQuestion()
+        }
+    }
+
+    func startDirectQuestion() {
+        // Check for Groq API key
+        guard groqApiKey != nil else {
+            promptForGroqApiKey()
+            return
+        }
+
+        // Check for Anthropic API key
+        guard apiKey != nil else {
+            showAlert(title: "API Key Required", message: "Please configure your Anthropic API key in Settings (⌘,)")
+            return
+        }
+
+        isAskingDirectQuestion = true
+
+        // Update UI to active state
+        updateAskButtonState(active: true)
+
+        // Add status message
+        addVoiceMessage(type: .status, content: "Listening to you...", topic: nil)
+
+        // Use Task to handle async operations properly
+        Task { @MainActor in
+            // Pause system audio capture if session is active
+            if isSessionActive {
+                await systemAudioCapture?.stopCapturing()
+                try? await Task.sleep(nanoseconds: 100_000_000)  // 100ms
+            }
+
+            // Initialize mic recorder with VAD timeout for direct questions
+            directQuestionRecorder = VADAudioRecorder()
+            directQuestionRecorder?.silenceTimeout = 0.8  // Quick response for questions
+
+            // Set up callbacks
+            directQuestionRecorder?.onLevelUpdate = { [weak self] db, isSpeaking in
+                guard let self = self else { return }
+                DispatchQueue.main.async {
+                    let intensity = max(0, min(1, (db + 50) / 40))
+                    self.pulseAskButton(intensity: CGFloat(intensity), isSpeaking: isSpeaking)
+                }
+            }
+
+            directQuestionRecorder?.onStatusChange = { _ in }
+
+            directQuestionRecorder?.onSpeechSegment = { [weak self] audioData in
+                guard let self = self else { return }
+                self.processDirectQuestion(audioData)
+            }
+
+            // Start listening
+            do {
+                guard let recorder = directQuestionRecorder else {
+                    cancelDirectQuestion()
+                    return
+                }
+                try recorder.startListening()
+            } catch {
+                cancelDirectQuestion()
+            }
+        }
+    }
+
+    func processDirectQuestion(_ audioData: Data) {
+        // Stop recording immediately
+        directQuestionRecorder?.stopListening()
+
+        // Update UI
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            self.updateAskButtonState(active: false, processing: true)
+        }
+
+        // Transcribe with Groq
+        Task {
+            guard let groqKey = groqApiKey else { return }
+            let groq = GroqSpeechClient(apiKey: groqKey)
+
+            do {
+                let transcribeResult = try await groq.transcribe(audioData: audioData)
+                let transcription = transcribeResult.text
+
+                // Skip empty or very short transcriptions
+                guard transcription.count > 3 else {
+                    await MainActor.run {
+                        self.addVoiceMessage(type: .status, content: "No question detected", topic: nil)
+                        self.finishDirectQuestion()
+                    }
+                    return
+                }
+
+                await MainActor.run {
+                    // Add the question to timeline (marked as from microphone)
+                    self.addVoiceMessage(type: .question, content: transcription, topic: nil, audioSource: .microphone)
+
+                    // Create streaming answer container
+                    self.addStreamingMessage(type: .answer, topic: nil)
+                    self.streamingContent = ""
+                }
+
+                // Process with Claude using chatWithTools for tool-supported answers
+                guard let anthropicKey = self.apiKey else { return }
+                let client = AnthropicClient(apiKey: anthropicKey)
+
+                // Build system prompt for direct questions
+                let systemPrompt = """
+                You are a helpful assistant answering direct questions from the user.
+                Be concise but thorough. Use the available tools to search for relevant information if needed.
+                Tech stack context: \(AppSettings.shared.techStack.displayName)
+                """
+
+                // Use chatWithTools for Q&A with tool support
+                let configuredTools = ToolExecutor.shared.configuredToolDefinitions
+                let result = await client.chatWithTools(
+                    question: transcription,
+                    tools: configuredTools,
+                    systemPrompt: systemPrompt,
+                    onToolUse: { [weak self] toolName in
+                        DispatchQueue.main.async {
+                            let icon = ToolExecutor.shared.icon(for: toolName)
+                            let displayName = ToolExecutor.shared.displayName(for: toolName)
+                            // Update streaming status instead of adding separate message
+                            self?.updateStreamingStatus("\(icon) Searching \(displayName)...")
+                        }
+                    },
+                    onChunk: { [weak self] chunk in
+                        DispatchQueue.main.async {
+                            self?.streamingContent += chunk
+                            if let content = self?.streamingContent {
+                                self?.updateStreamingMessage(content)
+                            }
+                        }
+                    }
+                )
+
+                await MainActor.run {
+                    self.hideLoading()
+                    switch result {
+                    case .success(let answer):
+                        self.finalizeStreamingMessage(answer)
+                    case .failure(let error):
+                        self.addVoiceMessage(type: .status, content: "Error: \(error.localizedDescription)", topic: nil)
+                    }
+                }
+
+            } catch {
+                await MainActor.run {
+                    self.hideLoading()
+                    self.addVoiceMessage(type: .status, content: "Failed to process: \(error.localizedDescription)", topic: nil)
+                }
+            }
+
+            // Finish and resume
+            await MainActor.run {
+                self.finishDirectQuestion()
+            }
+        }
+    }
+
+    func cancelDirectQuestion() {
+        directQuestionRecorder?.stopListening()
+        finishDirectQuestion()
+        addVoiceMessage(type: .status, content: "Question cancelled", topic: nil)
+    }
+
+    func finishDirectQuestion() {
+        directQuestionRecorder = nil
+        isAskingDirectQuestion = false
+
+        // Reset button state
+        updateAskButtonState(active: false, processing: false)
+
+        // Resume system audio capture if session was active
+        if isSessionActive {
+            Task {
+                try? await systemAudioCapture?.startCapturing()
+            }
+        }
+    }
+
+    func updateAskButtonState(active: Bool, processing: Bool = false) {
+        let baseColor: NSColor
+        let iconName: String
+        let iconColor: NSColor
+
+        if processing {
+            // Processing state - purple tint
+            baseColor = NSColor.systemPurple
+            iconName = "ellipsis"
+            iconColor = .white
+        } else if active {
+            // Active listening state - orange/recording tint
+            baseColor = NSColor(red: 1.0, green: 0.4, blue: 0.3, alpha: 1.0)
+            iconName = "mic.fill"
+            iconColor = .white
+        } else {
+            // Idle state
+            baseColor = NSColor.white.withAlphaComponent(0.08)
+            iconName = "mic.fill"
+            iconColor = NSColor.white.withAlphaComponent(0.9)
+        }
+
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.2
+            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+
+            askButtonInner.backgroundColor = baseColor.cgColor
+            if active || processing {
+                askButtonInner.borderColor = baseColor.withAlphaComponent(0.5).cgColor
+            } else {
+                askButtonInner.borderColor = NSColor.white.withAlphaComponent(0.2).cgColor
+            }
+        }
+
+        askIconView.image = NSImage(systemSymbolName: iconName, accessibilityDescription: active ? "Listening" : "Ask")
+        askIconView.contentTintColor = iconColor
+    }
+
+    func pulseAskButton(intensity: CGFloat, isSpeaking: Bool) {
+        guard isAskingDirectQuestion else { return }
+
+        let scale = 1.0 + (intensity * 0.1)  // Subtle pulse
+        let brightness = 0.3 + (intensity * 0.4)
+
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.05
+            // Pulse the mic button
+            voiceBarMicButton.animator().layer?.transform = CATransform3DMakeScale(scale, scale, 1.0)
+            voiceBarMicButton.layer?.backgroundColor = NSColor(red: 0.3, green: 1.0, blue: brightness, alpha: 0.3).cgColor
+            // Update mic icon color intensity
+            voiceBarMicIcon.animator().contentTintColor = NSColor.appleGreen.withAlphaComponent(0.5 + intensity * 0.5)
+        }
+    }
+
+    /// Pulse the voice bar based on system audio levels (animates waveform bars)
+    func pulseSpeakerIcon(isSpeaking: Bool, db: Float) {
+        guard isSessionActive, isVoiceBarExpanded else { return }
+
+        // Animate waveform bars - this is the main audio visualization in the new design
+        animateWaveform(bars: voiceBarWaveformBars, color: .white, isSpeaking: isSpeaking, db: db)
+    }
+
+    /// Pulse the mic icon based on user's microphone audio levels
+    func pulseMicIcon(isSpeaking: Bool, db: Float) {
+        guard isSessionActive else { return }
+        guard !isAskingDirectQuestion else { return }  // Don't interfere with push-to-talk animation
+
+        let normalizedDb = max(0, min(1, (db + 60) / 40))
+        let intensity = CGFloat(normalizedDb)
+
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = isSpeaking ? 0.05 : 0.2
+
+            if isSpeaking {
+                // Pulse effect when user speaks
+                let scale = 1.0 + (intensity * 0.08)
+                voiceBarMicButton.animator().layer?.transform = CATransform3DMakeScale(scale, scale, 1.0)
+                voiceBarMicButton.layer?.backgroundColor = NSColor.appleGreen.withAlphaComponent(0.15 + intensity * 0.2).cgColor
+                voiceBarMicIcon.animator().contentTintColor = NSColor.appleGreen.withAlphaComponent(0.6 + intensity * 0.4)
+            } else {
+                // Return to idle state
+                voiceBarMicButton.animator().layer?.transform = CATransform3DIdentity
+                voiceBarMicButton.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.1).cgColor
+                voiceBarMicIcon.animator().contentTintColor = NSColor.appleGreen.withAlphaComponent(0.9)
+            }
+        }
     }
 
     // MARK: - Settings Dropdowns
@@ -3455,9 +4578,9 @@ The function uses a **hash map** for `O(n)` time complexity.
         NSLog("💻 Tech stack changed to: \(AppSettings.shared.techStack.displayName)")
     }
 
-    // MARK: - Export Interview
+    // MARK: - Export Session
 
-    @objc func exportInterview() {
+    @objc func exportSession() {
         // Filter to only questions, answers, and followups (user responses disabled)
         let exportableMessages = voiceMessages.filter { msg in
             switch msg.type {
@@ -3465,7 +4588,7 @@ The function uses a **hash map** for `O(n)` time complexity.
                 return true
             case .userResponse:  // DISABLED: User voice responses
                 return false
-            case .status, .screenshot:
+            case .status, .screenshot, .toolUse, .source:
                 return false
             }
         }
@@ -3473,7 +4596,7 @@ The function uses a **hash map** for `O(n)` time complexity.
         guard !exportableMessages.isEmpty else {
             let alert = NSAlert()
             alert.messageText = "Nothing to Export"
-            alert.informativeText = "Start an interview and have some Q&A before exporting."
+            alert.informativeText = "Start a session and have some Q&A before exporting."
             alert.alertStyle = .informational
             alert.addButton(withTitle: "OK")
             alert.runModal()
@@ -3481,11 +4604,11 @@ The function uses a **hash map** for `O(n)` time complexity.
         }
 
         // Format the export
-        var markdown = "# Interview Transcript\n\n"
+        var markdown = "# Session Transcript\n\n"
         markdown += "**Date:** \(DateFormatter.localizedString(from: Date(), dateStyle: .long, timeStyle: .short))\n"
         markdown += "**Tech Stack:** \(AppSettings.shared.techStack.displayName)\n\n"
         markdown += "**Legend:**\n"
-        markdown += "- <span style=\"color: #E74C3C\">🎙️ **Interviewer**</span> - Questions from the interviewer\n"
+        markdown += "- <span style=\"color: #E74C3C\">🎙️ **Speaker**</span> - Questions from the speaker\n"
         markdown += "- <span style=\"color: #27AE60\">💡 **Suggested Answer**</span> - AI-generated answer hints\n\n"
         markdown += "---\n\n"
 
@@ -3501,8 +4624,8 @@ The function uses a **hash map** for `O(n)` time complexity.
             let time = msg.displayTime
             switch msg.type {
             case .question:
-                // Red/coral for interviewer
-                markdown += "### <span style=\"color: #E74C3C\">🎙️ Interviewer</span> <small>(\(time))</small>\n\n"
+                // Red/coral for speaker
+                markdown += "### <span style=\"color: #E74C3C\">🎙️ Speaker</span> <small>(\(time))</small>\n\n"
                 markdown += "> \(msg.content)\n\n"
             case .answer, .followUp:
                 // Green for AI suggested answer
@@ -3519,12 +4642,12 @@ The function uses a **hash map** for `O(n)` time complexity.
             }
         }
 
-        markdown += "---\n\n*Exported from Interview Master*\n"
+        markdown += "---\n\n*Exported from Conversation Assistant*\n"
 
         // Show save panel
         let savePanel = NSSavePanel()
-        savePanel.title = "Export Interview"
-        savePanel.nameFieldStringValue = "interview_\(formattedDateForFilename()).md"
+        savePanel.title = "Export Session"
+        savePanel.nameFieldStringValue = "session_\(formattedDateForFilename()).md"
         savePanel.allowedContentTypes = [.plainText]
         savePanel.canCreateDirectories = true
 
@@ -3615,36 +4738,43 @@ The function uses a **hash map** for `O(n)` time complexity.
     }
 
     /// Animate waveform bars based on speaking state and dB level
+    /// Supports both old 5-bar layout and new 25-bar voice bar design
     func animateWaveform(bars: [NSView], color: NSColor, isSpeaking: Bool, db: Float) {
-        let barMaxHeight: CGFloat = 14
-        let barMinHeight: CGFloat = 3
-        // Wave pattern for 5 bars: outer bars smaller, center bar tallest
-        let waveMultipliers: [CGFloat] = [0.5, 0.8, 1.0, 0.8, 0.5]
+        // Only animate if voice bar is expanded (or using legacy 5-bar setup)
+        guard isVoiceBarExpanded || bars.count <= 5 else { return }
+
+        let barMaxHeight: CGFloat = bars.count > 5 ? 20 : 14  // Taller bars for new design
+        let barMinHeight: CGFloat = bars.count > 5 ? 4 : 3
+        let barCount = bars.count
 
         // When speaking, animate bars to varying heights based on volume
         // When silent, shrink all bars to minimum with wave pattern
         NSAnimationContext.runAnimationGroup { context in
-            context.duration = isSpeaking ? 0.06 : 0.25
+            context.duration = isSpeaking ? 0.05 : 0.2  // Faster response for new design
             context.timingFunction = CAMediaTimingFunction(name: .easeOut)
 
             for (index, bar) in bars.enumerated() {
                 var targetHeight: CGFloat
                 var alpha: CGFloat
-                let waveMultiplier = index < waveMultipliers.count ? waveMultipliers[index] : 0.7
+
+                // Calculate wave multiplier based on position (center bars taller)
+                let normalizedPos = abs(CGFloat(index) - CGFloat(barCount) / 2) / (CGFloat(barCount) / 2)
+                let waveMultiplier = 0.5 + 0.5 * (1 - normalizedPos)  // 0.5 at edges, 1.0 at center
 
                 if isSpeaking {
                     // Map dB to height: -60dB = min, -20dB = max
                     let normalizedDb = max(0, min(1, (db + 60) / 40))
-                    // Add variation per bar for organic waveform effect
-                    let variation = CGFloat.random(in: 0.7...1.0)
+                    // Add organic variation per bar with slight position-based offset
+                    let phaseOffset = sin(Double(index) * 0.5 + CACurrentMediaTime() * 3) * 0.15
+                    let variation = CGFloat(0.7 + 0.3 * CGFloat.random(in: 0...1) + phaseOffset)
                     let baseHeight = barMinHeight + (barMaxHeight - barMinHeight) * CGFloat(normalizedDb)
                     targetHeight = baseHeight * waveMultiplier * variation
-                    targetHeight = max(barMinHeight, targetHeight) // Ensure minimum
-                    alpha = 0.6 + CGFloat(normalizedDb) * 0.4
+                    targetHeight = max(barMinHeight, min(barMaxHeight, targetHeight))
+                    alpha = 0.5 + CGFloat(normalizedDb) * 0.5
                 } else {
                     // Resting state with gentle wave pattern
-                    targetHeight = barMinHeight + (barMaxHeight - barMinHeight) * 0.2 * waveMultiplier
-                    alpha = 0.35
+                    targetHeight = barMinHeight + (barMaxHeight - barMinHeight) * 0.25 * waveMultiplier
+                    alpha = 0.4
                 }
 
                 // Update bar frame (animate height from center)
@@ -3654,8 +4784,9 @@ The function uses a **hash map** for `O(n)` time complexity.
                 frame.origin.y = centerY - targetHeight / 2
                 bar.animator().frame = frame
 
-                // Update color with smooth transition
-                bar.animator().layer?.backgroundColor = color.withAlphaComponent(alpha).cgColor
+                // Update color with smooth transition (white/gray for new design)
+                let barColor = bars.count > 5 ? NSColor.white : color
+                bar.animator().layer?.backgroundColor = barColor.withAlphaComponent(alpha).cgColor
             }
         }
     }
@@ -3708,27 +4839,100 @@ The function uses a **hash map** for `O(n)` time complexity.
 
     // MARK: - Nest Button Animation
 
-    /// Update pill button state
+    /// Update voice bar state - expands/collapses with animation
     func updateNestButtonState(recording: Bool) {
-        // Update icon
-        let iconName = recording ? "stop.fill" : "play.fill"
-        nestIconView.image = NSImage(systemSymbolName: iconName, accessibilityDescription: recording ? "Stop" : "Start")
+        isVoiceBarExpanded = recording
 
-        // Update colors
-        let accentColor = recording ? NSColor.appleRed : NSColor.appleGreen
-        nestIconView.contentTintColor = accentColor
+        if recording {
+            // === EXPAND VOICE BAR ===
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = 0.35
+                context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                context.allowsImplicitAnimation = true
 
-        // Update label
-        if let label = nestButtonContainer.subviews.first(where: { $0.identifier?.rawValue == "nestStartLabel" }) as? NSTextField {
-            label.stringValue = recording ? "Stop" : "Start"
-            label.textColor = recording ? NSColor.appleRed : NSColor.white.withAlphaComponent(0.95)
+                // Expand container width
+                var containerFrame = voiceBarContainer.frame
+                containerFrame.size.width = voiceBarExpandedWidth
+                voiceBarContainer.animator().frame = containerFrame
+
+                // Expand background layer
+                CATransaction.begin()
+                CATransaction.setAnimationDuration(0.35)
+                voiceBarInner.frame = CGRect(x: 0, y: 0, width: voiceBarExpandedWidth, height: voiceBarContainer.frame.height)
+                voiceBarInner.borderColor = NSColor.white.withAlphaComponent(0.35).cgColor
+                CATransaction.commit()
+
+                // Expand click area
+                var toggleFrame = voiceToggleButton.frame
+                toggleFrame.size.width = voiceBarExpandedWidth
+                voiceToggleButton.animator().frame = toggleFrame
+
+                // Hide collapsed state elements
+                nestIconView.animator().alphaValue = 0
+                voiceBarLabel.animator().alphaValue = 0
+
+                // Show expanded state elements
+                voiceBarMicButton.animator().alphaValue = 1
+                voiceBarMicClickArea.animator().alphaValue = 1
+                voiceBarSendButton.animator().alphaValue = 1
+                voiceBarSendClickArea.animator().alphaValue = 1
+
+                // Show waveform bars with staggered fade
+                for (index, bar) in voiceBarWaveformBars.enumerated() {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + Double(index) * 0.012) {
+                        NSAnimationContext.runAnimationGroup { innerContext in
+                            innerContext.duration = 0.15
+                            bar.animator().alphaValue = 1
+                        }
+                    }
+                }
+            }
+        } else {
+            // === COLLAPSE VOICE BAR ===
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = 0.3
+                context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                context.allowsImplicitAnimation = true
+
+                // Collapse container width
+                var containerFrame = voiceBarContainer.frame
+                containerFrame.size.width = voiceBarCollapsedWidth
+                voiceBarContainer.animator().frame = containerFrame
+
+                // Collapse background layer
+                CATransaction.begin()
+                CATransaction.setAnimationDuration(0.3)
+                voiceBarInner.frame = CGRect(x: 0, y: 0, width: voiceBarCollapsedWidth, height: voiceBarContainer.frame.height)
+                voiceBarInner.borderColor = NSColor.white.withAlphaComponent(0.25).cgColor
+                CATransaction.commit()
+
+                // Collapse click area
+                var toggleFrame = voiceToggleButton.frame
+                toggleFrame.size.width = voiceBarCollapsedWidth
+                voiceToggleButton.animator().frame = toggleFrame
+
+                // Show collapsed state elements
+                nestIconView.animator().alphaValue = 1
+                voiceBarLabel.animator().alphaValue = 1
+
+                // Reset to idle visuals
+                nestIconView.image = NSImage(systemSymbolName: "waveform.circle.fill", accessibilityDescription: "Voice")
+                nestIconView.contentTintColor = NSColor.white.withAlphaComponent(0.9)
+                voiceBarLabel.stringValue = "Start"
+                voiceBarLabel.textColor = NSColor.white.withAlphaComponent(0.95)
+
+                // Hide expanded state elements
+                voiceBarMicButton.animator().alphaValue = 0
+                voiceBarMicClickArea.animator().alphaValue = 0
+                voiceBarSendButton.animator().alphaValue = 0
+                voiceBarSendClickArea.animator().alphaValue = 0
+
+                // Hide waveform bars
+                for bar in voiceBarWaveformBars {
+                    bar.animator().alphaValue = 0
+                }
+            }
         }
-
-        // Update button border color
-        CATransaction.begin()
-        CATransaction.setAnimationDuration(0.2)
-        nestButtonInner.borderColor = recording ? NSColor.appleRed.withAlphaComponent(0.5).cgColor : NSColor.white.withAlphaComponent(0.2).cgColor
-        CATransaction.commit()
     }
 
     func clearTimeline() {
@@ -3774,15 +4978,10 @@ The function uses a **hash map** for `O(n)` time complexity.
         for recent in recentTranscriptions {
             let similarity = stringSimilarity(text, recent.text)
             if similarity > similarityThreshold {
-                // Don't dedupe if new text is significantly longer (it's more complete, not a duplicate)
+                // Don't dedupe if new text is significantly longer (more complete)
                 let lengthRatio = Double(text.count) / Double(max(recent.text.count, 1))
-                if lengthRatio > 1.3 {
-                    NSLog("🔄 DEDUPE: Keeping longer transcription (%.0f%% similar but %.0f%% longer)", similarity * 100, (lengthRatio - 1) * 100)
-                    continue
-                }
-                let previewText = String(recent.text.prefix(30))
-                NSLog("🔄 DEDUPE: Skipping similar transcription (%.0f%% match with '%@')", similarity * 100, previewText)
-                return true
+                if lengthRatio > 1.3 { continue }
+                return true  // Skip duplicate
             }
         }
 
@@ -3791,37 +4990,28 @@ The function uses a **hash map** for `O(n)` time complexity.
     }
 
     func processAudioSegment(_ audioData: Data, source: AudioSource) {
-        let sourceLabel = source == .microphone ? "🎤 MIC" : "🔊 SYS"
-        NSLog("%@ PROCESS: processAudioSegment called with %d bytes", sourceLabel, audioData.count)
-        guard let client = groqClient else {
-            NSLog("❌ PROCESS: groqClient is nil!")
-            return
-        }
+        guard let client = groqClient else { return }
 
         Task {
             do {
-                // 1. Transcribe audio
                 await MainActor.run { showLoading("🎙️ Transcribing...", color: .systemBlue) }
-                NSLog("📡 PROCESS: Sending to Groq for transcription...")
                 let (transcription, sttLatency) = try await client.transcribe(audioData: audioData)
-                NSLog("📝 PROCESS: Transcription (%dms): '%@'", Int(sttLatency), transcription)
-                print("📝 Transcription (\(Int(sttLatency))ms): \(transcription)")
 
                 let trimmed = transcription.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !trimmed.isEmpty else {
-                    NSLog("⚠️ PROCESS: SKIPPED - Empty transcription after trimming")
                     await MainActor.run { hideLoading() }
                     return
                 }
 
-                // Deduplication check - skip if similar text was just processed
+                // Skip duplicates
                 if isDuplicateTranscription(trimmed, source: source) {
-                    NSLog("🔄 PROCESS: SKIPPED - Duplicate transcription")
                     await MainActor.run { hideLoading() }
                     return
                 }
 
-                NSLog("📝 PROCESS: Trimmed text (%d chars): '%@'", trimmed.count, trimmed)
+                // Log transcription (main output)
+                let sourceIcon = source == .microphone ? "🎤" : "🔊"
+                print("\(sourceIcon) [\(Int(sttLatency))ms] \(trimmed)")
 
                 // Filter Whisper hallucinations (common artifacts from silence/noise)
                 // Only filter if it's EXACTLY these phrases (not part of a longer sentence)
@@ -3870,21 +5060,15 @@ The function uses a **hash map** for `O(n)` time complexity.
                     .trimmingCharacters(in: .whitespaces)
                 // Filter exact matches (ignoring punctuation)
                 if trimmed.count < 30 && whisperHallucinations.contains(where: { lowerTrimmed == $0 }) {
-                    NSLog("👻 PROCESS: SKIPPED - Whisper hallucination: '%@' (normalized: '%@')", trimmed, lowerTrimmed)
-                    print("👻 Whisper hallucination filtered: \(trimmed)")
                     await MainActor.run { hideLoading() }
                     return
                 }
 
-                // Filter non-ASCII garbage when language is English (Bluetooth mic quality issue)
-                // Whisper hallucinates multilingual content when audio quality is poor
+                // Filter non-ASCII garbage when language is English
                 if AppSettings.shared.language == .english {
                     let nonAsciiCount = trimmed.unicodeScalars.filter { !$0.isASCII }.count
                     let nonAsciiRatio = Float(nonAsciiCount) / Float(max(trimmed.count, 1))
-                    // If more than 15% non-ASCII chars, it's likely hallucination
                     if nonAsciiRatio > 0.15 && nonAsciiCount > 3 {
-                        NSLog("👻 PROCESS: SKIPPED - Non-ASCII garbage (%.0f%% non-ASCII): '%@'", nonAsciiRatio * 100, trimmed)
-                        print("👻 Non-ASCII hallucination filtered (\(Int(nonAsciiRatio * 100))% non-ASCII): \(trimmed)")
                         await MainActor.run { hideLoading() }
                         return
                     }
@@ -3892,19 +5076,30 @@ The function uses a **hash map** for `O(n)` time complexity.
 
                 // Filter very short transcriptions (likely noise)
                 if trimmed.count < 5 && !trimmed.contains("?") {
-                    NSLog("👻 PROCESS: SKIPPED - Too short (%d chars), no '?': '%@'", trimmed.count, trimmed)
-                    print("👻 Too short, likely noise: \(trimmed)")
                     await MainActor.run { hideLoading() }
                     return
                 }
 
-                NSLog("✅ PROCESS: Passed hallucination/length filters, proceeding...")
-
-                // MICROPHONE = YOUR VOICE → Show directly as user response, no classification needed
+                // MICROPHONE = YOUR VOICE → Check for tool-worthy questions
                 if source == .microphone {
-                    NSLog("🎤 PROCESS: Mic audio - showing as user response directly")
-                    print("🎤 [you] \(trimmed)")
+                    let micToolKeywords = ["jira", "ticket", "sprint", "backlog", "issue", "confluence", "documentation", "wiki", "page", "assigned", "my tickets", "my issues", "what's left", "remaining", "blockers", "playwright"]
+                    let micQuestionLower = trimmed.lowercased()
+                    let micNeedsTools = micToolKeywords.contains { micQuestionLower.contains($0) } && ToolExecutor.shared.hasConfiguredTools
 
+                    if micNeedsTools {
+                        await MainActor.run { [self] in
+                            showLoading("🔍 Searching...", color: .systemBlue)
+                            addVoiceMessage(type: .question, content: trimmed, topic: "tools", audioSource: .microphone)
+                        }
+
+                        // Add to context and call tool-enabled flow
+                        conversationContext.addUtterance(text: trimmed, topic: "tools", isQuestion: true)
+                        await answerWithToolsForVoice(question: trimmed, topic: "tools", messageType: .question)
+                        await MainActor.run { hideLoading() }
+                        return
+                    }
+
+                    // Not a tool question - just show as user response
                     await MainActor.run { [self] in
                         hideLoading()
                         // DISABLED: User response display in timeline
@@ -3933,33 +5128,24 @@ The function uses a **hash map** for `O(n)` time complexity.
                 let questionWords = ["what", "how", "why", "when", "where", "which", "who", "can you", "could you", "would you", "tell me", "explain", "describe", "give me", "show me", "walk me"]
                 let hasQuestionWord = questionWords.contains { normalizedText.contains($0) }
 
-                // Skip if it's a greeting or filler AND short AND no question words
+                // Skip greetings/fillers
                 if (isGreeting || isFiller) && normalizedText.count < 50 && !hasQuestionWord {
-                    NSLog("⚡ PROCESS: LOCAL SKIP - Greeting/filler: '%@'", trimmed)
-                    print("⚡ Local filter: \(trimmed)")
                     await MainActor.run { hideLoading() }
                     return
                 }
 
-                // Also skip very short utterances
+                // Skip very short utterances
                 if normalizedText.count < 4 {
-                    NSLog("⚡ PROCESS: LOCAL SKIP - Too short: '%@'", trimmed)
-                    print("⚡ Local filter (short): \(trimmed)")
                     await MainActor.run { hideLoading() }
                     return
                 }
 
-                NSLog("🔊 PROCESS: System audio - classifying...")
-
-                // Combined classify + answer in ONE Haiku call
                 guard let haiku = anthropicClient else {
-                    NSLog("❌ PROCESS: anthropicClient is nil!")
                     await MainActor.run { hideLoading() }
                     return
                 }
 
-                // LOCAL INCOMPLETE FILTER: Skip LLM call for obviously incomplete sentences
-                // This saves ~700ms per fragment by not calling Haiku just to hear "incomplete"
+                // Buffer incomplete sentences locally
                 let textForIncompleteCheck = trimmed.lowercased().trimmingCharacters(in: .whitespaces)
                 let incompleteEndings = [" so", " and", " but", " the", " a", " an", " to", " of", " that", " if", " when", " is", " are", " have", " can", " will", " for", " with", " on", " in", ","]
                 let endsIncomplete = incompleteEndings.contains { textForIncompleteCheck.hasSuffix($0) }
@@ -3969,17 +5155,12 @@ The function uses a **hash map** for `O(n)` time complexity.
                     await MainActor.run {
                         utteranceBuffer = utteranceBuffer.isEmpty ? trimmed : "\(utteranceBuffer) \(trimmed)"
                         bufferTimestamp = Date()
+                        hideLoading()
                     }
-                    NSLog("⚡ PROCESS: LOCAL INCOMPLETE - Buffered without LLM: '%@'", trimmed)
-                    print("⚡ Local incomplete: \(trimmed)")
-                    await MainActor.run { hideLoading() }
                     return
                 }
 
                 await MainActor.run { showLoading("🔍 Analyzing...", color: .applePurple) }
-                NSLog("🔍 PROCESS: Combined classify+answer with Haiku... buffer='%@', lastTopic='%@'",
-                      utteranceBuffer.isEmpty ? "(empty)" : utteranceBuffer,
-                      conversationContext.lastTopic ?? "nil")
 
                 // Get context for the combined call
                 let userBackground = await MainActor.run { self.textView.string }
@@ -3989,9 +5170,13 @@ The function uses a **hash map** for `O(n)` time complexity.
 
                 // State for handling classification result
                 var shouldStreamAnswer = false
+                var shouldUseTools = false  // Route to tool-enabled flow instead of Haiku
                 var detectedTopic: String = "unknown"
-                var messageType: InterviewMessage.MessageType = .answer
+                var messageType: ConversationMessage.MessageType = .answer
                 var fullText = ""
+
+                // Tool-worthy keywords - questions about these should use tools
+                let toolKeywords = ["jira", "ticket", "sprint", "backlog", "issue", "confluence", "documentation", "wiki", "page", "assigned", "my tickets", "my issues", "what's left", "remaining", "blockers"]
 
                 let startTime = Date()
 
@@ -4004,25 +5189,16 @@ The function uses a **hash map** for `O(n)` time complexity.
                     topicsSummary: topicsSummary,
                     pinnedSolution: pinnedSolution,
                     onClassification: { [self] classification in
-                        let latency = Date().timeIntervalSince(startTime) * 1000
-                        NSLog("🎯 PROCESS: Classification (%dms): status='%@', topic='%@'",
-                              Int(latency), classification.status, classification.topic ?? "nil")
-                        print("🎯 Classification (\(Int(latency))ms): status=\(classification.status), topic=\(classification.topic ?? "nil")")
+                        // Log classification result
+                        print("→ \(classification.status) | topic: \(classification.topic ?? "unknown")")
 
                         // Handle filler words
-                        if classification.status == "filler" {
-                            NSLog("🗣️ PROCESS: SKIPPED - Filler word detected: '%@'", trimmed)
-                            print("🗣️ Filler word, ignoring")
-                            return
-                        }
+                        if classification.status == "filler" { return }
 
-                        // Override: Comma-ending sentences are incomplete regardless of LLM classification
-                        // This catches split questions like "...if I have not written static," + "So what will happen?"
+                        // Override: Comma-ending sentences are incomplete
                         let combinedForCheck = utteranceBuffer.isEmpty ? trimmed : "\(utteranceBuffer) \(trimmed)"
                         let endsWithComma = combinedForCheck.trimmingCharacters(in: .whitespaces).hasSuffix(",")
                         if classification.status == "question" && endsWithComma {
-                            NSLog("⚠️ PROCESS: OVERRIDE - Ends with comma, treating as incomplete")
-                            print("⚠️ Comma-ending, buffering instead of answering")
                             utteranceBuffer = combinedForCheck
                             bufferTimestamp = Date()
                             return
@@ -4032,21 +5208,16 @@ The function uses a **hash map** for `O(n)` time complexity.
                         if classification.status == "incomplete" {
                             utteranceBuffer = utteranceBuffer.isEmpty ? trimmed : "\(utteranceBuffer) \(trimmed)"
                             bufferTimestamp = Date()
-                            NSLog("📦 PROCESS: BUFFERED - Incomplete utterance. Buffer now: '%@'", utteranceBuffer)
-                            print("📦 Buffered: \(utteranceBuffer)")
                             return
                         }
 
                         // Complete utterance - combine with buffer if any
                         fullText = utteranceBuffer.isEmpty ? trimmed : "\(utteranceBuffer) \(trimmed)"
-                        NSLog("📝 PROCESS: Full text: '%@'", fullText)
                         utteranceBuffer = ""
-
                         detectedTopic = classification.topic ?? "unknown"
 
-                        // System audio classified as "answer" = interviewer talking (not a question)
+                        // System audio classified as "answer" = speaker talking (not a question)
                         if classification.status == "answer" {
-                            NSLog("🔊 PROCESS: Interviewer statement (not a question): '%@'", fullText)
                             conversationContext.addUtterance(text: fullText, topic: detectedTopic)
                             return
                         }
@@ -4057,21 +5228,14 @@ The function uses a **hash map** for `O(n)` time complexity.
                             if elapsed < answerCooldown {
                                 let isClearQuestion = checkForQuestionMarkers(fullText)
                                 if !isClearQuestion {
-                                    NSLog("⏸️ PROCESS: SKIPPED - Cooldown active")
-                                    print("⏸️ Cooldown active, no clear question")
                                     conversationContext.addUtterance(text: fullText, topic: detectedTopic)
                                     return
                                 }
-
-                                // Extra check: Short continuation fragments right after an answer
-                                // "So what will happen?" is a continuation, not a new question
                                 let wordCount = fullText.split(separator: " ").count
                                 let startsWithContinuation = ["so ", "and ", "then ", "but ", "or "].contains {
                                     fullText.lowercased().hasPrefix($0)
                                 }
                                 if elapsed < 3.0 && wordCount <= 6 && startsWithContinuation {
-                                    NSLog("🔗 PROCESS: SKIPPED - Short continuation fragment after answer")
-                                    print("🔗 Continuation fragment, skipping")
                                     conversationContext.addUtterance(text: fullText, topic: detectedTopic)
                                     return
                                 }
@@ -4087,31 +5251,37 @@ The function uses a **hash map** for `O(n)` time complexity.
                             // Orphan follow-up - check if background question
                             let backgroundKeywords = ["experience", "background", "yourself", "projects", "position", "role", "job", "work", "company", "team", "career"]
                             let isLikelyBackground = backgroundKeywords.contains { fullText.lowercased().contains($0) }
-                            if !isLikelyBackground {
-                                NSLog("⚠️ PROCESS: SKIPPED - Orphan followup")
-                                return
-                            }
+                            if !isLikelyBackground { return }
                             detectedTopic = "experience"
                         } else if topicLower == "unknown", let lastTopic = conversationContext.lastTopic {
                             if checkForQuestionMarkers(fullText) {
                                 messageType = .followUp
                                 detectedTopic = lastTopic
                             } else {
-                                NSLog("⚠️ PROCESS: SKIPPED - Unknown topic, no question markers")
                                 return
                             }
                         }
 
-                        // All checks passed - enable answer streaming
-                        NSLog("✅ PROCESS: Passed all filters! Streaming answer for topic='%@'", detectedTopic)
-                        shouldStreamAnswer = true
+                        // Check if this question needs tools (Jira, Confluence, etc.)
+                        let questionLower = fullText.lowercased()
+                        let needsTools = toolKeywords.contains { questionLower.contains($0) } && ToolExecutor.shared.hasConfiguredTools
+
+                        if needsTools {
+                            shouldUseTools = true
+                            shouldStreamAnswer = false
+                        } else {
+                            shouldStreamAnswer = true
+                        }
 
                         // Update context and UI on main thread
                         DispatchQueue.main.async { [self] in
-                            showLoading("💭 Generating answer...", color: .appleGreen)
+                            let loadingMsg = needsTools ? "🔍 Searching..." : "💭 Generating answer..."
+                            showLoading(loadingMsg, color: needsTools ? .systemBlue : .appleGreen)
                             addVoiceMessage(type: .question, content: fullText, topic: detectedTopic, audioSource: .systemAudio)
-                            streamingContent = ""
-                            addStreamingMessage(type: messageType, topic: detectedTopic)
+                            if !needsTools {
+                                streamingContent = ""
+                                addStreamingMessage(type: messageType, topic: detectedTopic)
+                            }
                         }
 
                         conversationContext.addUtterance(text: fullText, topic: detectedTopic, isQuestion: true)
@@ -4132,19 +5302,24 @@ The function uses a **hash map** for `O(n)` time complexity.
                 case .success:
                     if shouldStreamAnswer {
                         print("💡 Answer (Haiku \(Int(totalLatency))ms): \(streamingContent.prefix(100))...")
+                        // Add answer to conversation context for follow-up questions
+                        conversationContext.addUtterance(text: streamingContent, topic: detectedTopic, isQuestion: false)
                         await MainActor.run { finalizeStreamingMessage(streamingContent) }
                     }
-                case .failure(let error):
-                    print("❌ Combined call error: \(error)")
+                case .failure:
                     if shouldStreamAnswer {
-                        await MainActor.run { updateStreamingMessage("Error: \(error.localizedDescription)") }
+                        await MainActor.run { updateStreamingMessage("Error processing request") }
                     }
+                }
+
+                // If tool-worthy question detected, call tool-enabled flow
+                if shouldUseTools && !fullText.isEmpty {
+                    await answerWithToolsForVoice(question: fullText, topic: detectedTopic, messageType: messageType)
                 }
 
                 await MainActor.run { hideLoading() }
 
             } catch {
-                print("❌ Error processing audio: \(error)")
                 await MainActor.run {
                     hideLoading()
                     voiceStatusLabel.stringValue = "Error: \(error.localizedDescription)"
@@ -4159,14 +5334,8 @@ The function uses a **hash map** for `O(n)` time complexity.
     var streamingContent: String = ""
 
     /// Generate answer using Haiku with streaming
-    func streamAnswerWithHaiku(question: String, topic: String, userBackground: String?, messageType: InterviewMessage.MessageType) async {
-        NSLog("💬 streamAnswerWithHaiku called - question: \(question.prefix(50))...")
-        guard let haiku = anthropicClient else {
-            NSLog("❌ Anthropic client not configured!")
-            print("❌ Anthropic client not configured")
-            return
-        }
-        NSLog("✅ anthropicClient is ready")
+    func streamAnswerWithHaiku(question: String, topic: String, userBackground: String?, messageType: ConversationMessage.MessageType) async {
+        guard let haiku = anthropicClient else { return }
 
         let backgroundContext = userBackground != nil && !userBackground!.isEmpty ? """
         YOUR BACKGROUND (use for personal questions like "tell me about yourself"):
@@ -4198,7 +5367,7 @@ The function uses a **hash map** for `O(n)` time complexity.
         let languageInstruction = AppSettings.shared.llmLanguageInstruction
         let prompt = """
         You are helping someone who is BEING INTERVIEWED for a software engineering position.
-        They need quick, glanceable answers to help them respond to the interviewer.
+        They need quick, glanceable answers to help them respond to the speaker.
 
         \(backgroundContext)\(historyContext)\(pinnedContext)CURRENT QUESTION: "\(question)"
         Topic: \(topic)
@@ -4228,8 +5397,6 @@ The function uses a **hash map** for `O(n)` time complexity.
             addStreamingMessage(type: messageType, topic: topic)
         }
 
-        let startTime = Date()
-
         // Stream the response
         let result = await haiku.streamTextMessage(prompt: prompt, maxTokens: 250) { [weak self] chunk in
             guard let self = self else { return }
@@ -4239,26 +5406,204 @@ The function uses a **hash map** for `O(n)` time complexity.
             }
         }
 
-        let latency = Date().timeIntervalSince(startTime) * 1000
-
         switch result {
         case .success:
-            print("💡 Answer (Haiku \(Int(latency))ms): \(streamingContent.prefix(100))...")
             // Final update with formatting
             await MainActor.run {
                 finalizeStreamingMessage(streamingContent)
             }
         case .failure(let error):
-            print("❌ Streaming error: \(error)")
             await MainActor.run {
                 updateStreamingMessage("Error: \(error.localizedDescription)")
             }
         }
     }
 
+    /// Generate answer using tools to search knowledge sources
+    func answerWithTools(question: String, topic: String) async {
+        guard let client = anthropicClient else { return }
+        
+        // Check if any tools are configured
+        let configuredTools = ToolExecutor.shared.configuredToolDefinitions
+        if configuredTools.isEmpty {
+            // Fall back to regular answer without tools
+            await streamAnswerWithHaiku(question: question, topic: topic, userBackground: nil, messageType: .answer)
+            return
+        }
+        
+        // Build user context from OAuth data
+        var userContext = ""
+        let displayName = DataSourceConfig.shared.getValue(for: .confluence, field: "userDisplayName")
+        let email = DataSourceConfig.shared.getValue(for: .confluence, field: "userEmail")
+        let accountId = DataSourceConfig.shared.getValue(for: .confluence, field: "userAccountId")
+
+        if let displayName = displayName {
+            userContext = """
+
+            CONNECTED USER: \(displayName)\(email.map { " (\($0))" } ?? "")
+            When the user asks for "my tickets", "my issues", or anything personal, use this identity.
+            """
+        } else if let email = email {
+            // Fallback to email if displayName not available
+            userContext = """
+
+            CONNECTED USER: \(email)
+            When the user asks for "my tickets", "my issues", or anything personal, use this identity.
+            """
+        }
+
+        // Build system prompt for tool use
+        let systemPrompt = """
+        You are a fast, action-oriented assistant with access to work tools.
+        \(userContext)
+        TOOL ROUTING (use immediately, don't ask):
+        • Ticket/sprint/work → search_jira (supports "PROJ-123" for direct lookup)
+        • Docs/process/how-to → search_documentation
+        • Code/PRs/GitHub issues → search_codebase (detects "PR", "issue" keywords)
+        • External/library docs → web_search (last resort)
+
+        MULTI-TOOL STRATEGY:
+        • Cross-reference: If Jira ticket mentions a feature, also search code/docs
+        • Combine results: Give user a complete picture from multiple sources
+        • Follow leads: If one tool mentions something, search for it in others
+
+        RESPONSE RULES:
+        1. Be concise - 3-5 bullet points max
+        2. ALWAYS include clickable URLs from every result (Jira, Confluence, GitHub)
+        3. Cite sources: "From Jira:", "From Confluence:", "From GitHub:"
+        4. If tool returns nothing, try another before saying "not found"
+        """
+        
+        // Create streaming message on main thread
+        await MainActor.run {
+            streamingContent = ""
+            addStreamingMessage(type: .answer, topic: topic)
+        }
+        
+        let result = await client.chatWithTools(
+            question: question,
+            tools: configuredTools,
+            systemPrompt: systemPrompt,
+            onToolUse: { [weak self] toolName in
+                guard let self = self else { return }
+                DispatchQueue.main.async {
+                    // Update streaming status instead of adding separate message
+                    let icon = ToolExecutor.shared.icon(for: toolName)
+                    let displayName = ToolExecutor.shared.displayName(for: toolName)
+                    self.updateStreamingStatus("\(icon) Searching \(displayName)...")
+                }
+            },
+            onChunk: { [weak self] chunk in
+                guard let self = self else { return }
+                DispatchQueue.main.async {
+                    self.streamingContent += chunk
+                    self.updateStreamingMessage(self.streamingContent)
+                }
+            }
+        )
+        
+        switch result {
+        case .success(let answer):
+            await MainActor.run {
+                finalizeStreamingMessage(answer)
+            }
+        case .failure(let error):
+            await MainActor.run {
+                updateStreamingMessage("Error: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    /// Answer voice questions using tools (Jira, Confluence, etc.)
+    func answerWithToolsForVoice(question: String, topic: String, messageType: ConversationMessage.MessageType) async {
+        guard let anthropicKey = ApiKeyManager.shared.getKey(.anthropic) else { return }
+
+        let client = AnthropicClient(apiKey: anthropicKey)
+
+        // Build user context from OAuth data
+        var userContext = ""
+        let displayName = DataSourceConfig.shared.getValue(for: .confluence, field: "userDisplayName")
+        let email = DataSourceConfig.shared.getValue(for: .confluence, field: "userEmail")
+
+        if let displayName = displayName {
+            userContext = "\nCONNECTED USER: \(displayName)\(email.map { " (\($0))" } ?? "")\n"
+        }
+
+        // System prompt - conversation history is now passed via native multi-turn
+        let systemPrompt = """
+        You are a fast, action-oriented assistant with access to work tools.
+        \(userContext)
+        TOOL ROUTING (use immediately, don't ask):
+        • Ticket/sprint/work → search_jira (supports "PROJ-123" for direct lookup)
+        • Docs/process/how-to → search_documentation
+        • Code/PRs/GitHub issues → search_codebase (detects "PR", "issue" keywords)
+        • External/library docs → web_search (last resort)
+
+        MULTI-TOOL STRATEGY:
+        • "What's the status of feature X?" → search_jira + search_codebase (find ticket AND related PRs)
+        • "How do we deploy X?" → search_documentation + search_jira (find docs AND related tickets)
+        • Ticket mentions code? → Also search_codebase for related PRs
+
+        RESPONSE RULES:
+        1. Be concise - 3-5 bullet points max
+        2. ALWAYS include clickable URLs from results (Jira, Confluence, GitHub)
+        3. When user says "it"/"that", check conversation history
+        4. If first tool returns nothing useful, try another tool
+
+        Tech stack: \(AppSettings.shared.techStack.displayName)
+        """
+
+        // Set up streaming UI
+        await MainActor.run { [self] in
+            streamingContent = ""
+            addStreamingMessage(type: messageType, topic: topic)
+        }
+
+        let configuredTools = ToolExecutor.shared.configuredToolDefinitions
+
+        let result = await client.chatWithTools(
+            question: question,
+            tools: configuredTools,
+            systemPrompt: systemPrompt,
+            conversationHistory: chatHistory,  // Pass multi-turn history
+            onToolUse: { [weak self] (toolName: String) in
+                DispatchQueue.main.async {
+                    let icon = ToolExecutor.shared.icon(for: toolName)
+                    let displayName = ToolExecutor.shared.displayName(for: toolName)
+                    self?.updateStreamingStatus("\(icon) Searching \(displayName)...")
+                }
+            },
+            onChunk: { [weak self] (chunk: String) in
+                DispatchQueue.main.async {
+                    self?.streamingContent += chunk
+                    if let content = self?.streamingContent {
+                        self?.updateStreamingMessage(content)
+                    }
+                }
+            }
+        )
+
+        switch result {
+        case .success(let answer):
+            // Add to multi-turn chat history (native Claude format)
+            chatHistory.addUser(question)
+            chatHistory.addAssistant(answer)
+            // Also add to legacy context for other flows
+            conversationContext.addUtterance(text: question, topic: topic, isQuestion: true)
+            conversationContext.addUtterance(text: answer, topic: topic, isQuestion: false)
+            await MainActor.run { [self] in
+                finalizeStreamingMessage(answer)
+            }
+        case .failure(let error):
+            await MainActor.run { [self] in
+                finalizeStreamingMessage("Error: \(error.localizedDescription)")
+            }
+        }
+    }
+
     /// Add an empty streaming message that will be updated
-    func addStreamingMessage(type: InterviewMessage.MessageType, topic: String?) {
-        let message = InterviewMessage(type: type, content: "▌", topic: topic)
+    func addStreamingMessage(type: ConversationMessage.MessageType, topic: String?) {
+        let message = ConversationMessage(type: type, content: "▌", topic: topic)
         voiceMessages.append(message)
 
         // Layout: A badge indented 20px, card after badge
@@ -4368,6 +5713,12 @@ The function uses a **hash map** for `O(n)` time complexity.
         textView.string = ""
         textView.isHidden = true
         textView.identifier = NSUserInterfaceItemIdentifier("streamingText")
+        textView.isAutomaticLinkDetectionEnabled = true  // Enable clicking links
+        textView.linkTextAttributes = [
+            .foregroundColor: NSColor.systemBlue,
+            .underlineStyle: NSUnderlineStyle.single.rawValue,
+            .cursor: NSCursor.pointingHand
+        ]
         container.addSubview(textView)
 
         outerContainer.addSubview(container)
@@ -4476,6 +5827,15 @@ The function uses a **hash map** for `O(n)` time complexity.
         }
     }
 
+    /// Update the streaming status label (e.g., "Searching Jira...")
+    func updateStreamingStatus(_ status: String) {
+        guard let container = currentStreamingContainer else { return }
+        
+        if let loadingLabel = container.subviews.first(where: { $0.identifier?.rawValue == "streamingLoadingLabel" }) as? NSTextField {
+            loadingLabel.stringValue = status
+        }
+    }
+
     /// Finalize streaming message with proper formatting
     func finalizeStreamingMessage(_ content: String) {
         guard let textView = currentStreamingTextView,
@@ -4527,7 +5887,7 @@ The function uses a **hash map** for `O(n)` time complexity.
         if !voiceMessages.isEmpty {
             let lastIndex = voiceMessages.count - 1
             let lastMessage = voiceMessages[lastIndex]
-            voiceMessages[lastIndex] = InterviewMessage(type: lastMessage.type, content: content, topic: lastMessage.topic)
+            voiceMessages[lastIndex] = ConversationMessage(type: lastMessage.type, content: content, topic: lastMessage.topic)
 
             // Update floating window Q&A in real-time
             if floatingSolutionWindow != nil {
@@ -4570,8 +5930,8 @@ The function uses a **hash map** for `O(n)` time complexity.
         return markers.contains { lowerText.contains($0) }
     }
 
-    func addVoiceMessage(type: InterviewMessage.MessageType, content: String, topic: String?, audioSource: AudioSource? = nil) {
-        let message = InterviewMessage(type: type, content: content, topic: topic, audioSource: audioSource)
+    func addVoiceMessage(type: ConversationMessage.MessageType, content: String, topic: String?, audioSource: AudioSource? = nil) {
+        let message = ConversationMessage(type: type, content: content, topic: topic, audioSource: audioSource)
         voiceMessages.append(message)
 
         // Create message view
@@ -4606,9 +5966,38 @@ The function uses a **hash map** for `O(n)` time complexity.
         }
     }
 
+    /// Show a tool use indicator in the timeline
+    func showToolStatus(_ toolName: String) {
+        let icons: [String: String] = [
+            "search_documentation": "📚",
+            "search_codebase": "💻",
+            "query_database": "🗄️",
+            "web_search": "🌐"
+        ]
+        let displayNames: [String: String] = [
+            "search_documentation": "documentation",
+            "search_codebase": "codebase",
+            "query_database": "database",
+            "web_search": "web"
+        ]
+        let icon = icons[toolName] ?? "🔧"
+        let displayName = displayNames[toolName] ?? toolName.replacingOccurrences(of: "_", with: " ")
+        let message = "\(icon) Searching \(displayName)..."
+        addVoiceMessage(type: .toolUse, content: message, topic: nil)
+    }
+
+    /// Show a source citation in the timeline
+    func showSourceCitation(title: String, url: String?) {
+        var content = title
+        if let url = url, !url.isEmpty {
+            content = "[\(title)](\(url))"
+        }
+        addVoiceMessage(type: .source, content: content, topic: nil)
+    }
+
     /// Add a user response message (collapsed by default, expandable)
     func addUserResponseMessage(content: String, topic: String?) {
-        var message = InterviewMessage(type: .userResponse, content: content, topic: topic, audioSource: .microphone)
+        var message = ConversationMessage(type: .userResponse, content: content, topic: topic, audioSource: .microphone)
         message.isCollapsed = true
         voiceMessages.append(message)
 
@@ -4637,7 +6026,7 @@ The function uses a **hash map** for `O(n)` time complexity.
     }
 
     /// Create a collapsed user response view (click to expand)
-    func createCollapsedUserResponseView(for message: InterviewMessage) -> NSView {
+    func createCollapsedUserResponseView(for message: ConversationMessage) -> NSView {
         let width = voiceTimelineContainer.frame.width - 40
         let collapsedHeight: CGFloat = 36
 
@@ -4786,7 +6175,7 @@ The function uses a **hash map** for `O(n)` time complexity.
 
     /// Add a screenshot thumbnail to the voice timeline (gallery style - one entry, multiple thumbnails)
     func addScreenshotToTimeline(thumbnail: NSImage, screenshotId: UUID) {
-        let message = InterviewMessage(type: .screenshot, content: "Screenshot", topic: nil, screenshotId: screenshotId)
+        let message = ConversationMessage(type: .screenshot, content: "Screenshot", topic: nil, screenshotId: screenshotId)
         voiceMessages.append(message)
 
         let thumbWidth: CGFloat = 80
@@ -5020,20 +6409,22 @@ The function uses a **hash map** for `O(n)` time complexity.
         )
     }
 
-    func createMessageView(for message: InterviewMessage) -> NSView {
+    func createMessageView(for message: ConversationMessage) -> NSView {
         // Determine styling based on message type
         let isQuestion = message.type == .question
         let isStatus = message.type == .status
         let isScreenshot = message.type == .screenshot
         let isAnswer = message.type == .answer || message.type == .followUp
+        let isToolUse = message.type == .toolUse
+        let isSource = message.type == .source
 
         // Layout: badge on left, card after badge, answers indented 20px
         let badgeWidth: CGFloat = 22
         let badgeGap: CGFloat = 8
         let answerIndent: CGFloat = 20
 
-        // Badge position: questions at 0, answers indented
-        let badgeX: CGFloat = isAnswer ? answerIndent : 0
+        // Badge position: questions at 0, answers/tool messages indented
+        let badgeX: CGFloat = (isAnswer || isToolUse || isSource) ? answerIndent : 0
         // Card starts after badge
         let cardX: CGFloat = badgeX + badgeWidth + badgeGap
         let cardWidth = voiceTimelineContainer.frame.width - 40 - cardX
@@ -5088,6 +6479,17 @@ The function uses a **hash map** for `O(n)` time complexity.
             accentColor = NSColor.applePurple
             symbolName = "camera.fill"
             bgAlpha = 0.05
+        } else if isToolUse {
+            // Tool use indicator - uses tool-specific icon from content prefix
+            accentColor = NSColor.systemBlue
+            // Extract tool icon from content (e.g., "📚 Searching..." -> use magnifyingglass)
+            symbolName = "magnifyingglass"
+            bgAlpha = 0.04
+        } else if isSource {
+            // Source/citation - subtle link style
+            accentColor = NSColor.systemTeal
+            symbolName = "link"
+            bgAlpha = 0.03
         } else {
             // Answer, followUp, userResponse all treated as AI response
             accentColor = NSColor.appleGreen
@@ -5116,9 +6518,18 @@ The function uses a **hash map** for `O(n)` time complexity.
             container.addSubview(iconView)
         }
 
-        // Header label only for status/screenshot (Q/A have badges instead)
-        if isStatus || isScreenshot {
-            let headerText = isStatus ? "Status" : "Screenshot"
+        // Header label only for status/screenshot/toolUse/source (Q/A have badges instead)
+        if isStatus || isScreenshot || isToolUse || isSource {
+            let headerText: String
+            if isStatus {
+                headerText = "Status"
+            } else if isScreenshot {
+                headerText = "Screenshot"
+            } else if isToolUse {
+                headerText = "Searching"
+            } else {
+                headerText = "Source"
+            }
             let headerLabel = NSTextField(labelWithString: headerText)
             headerLabel.frame = NSRect(x: 32, y: viewHeight - headerHeight + 2, width: 80, height: 18)
             headerLabel.font = .systemFont(ofSize: 11, weight: .semibold)
@@ -5127,7 +6538,7 @@ The function uses a **hash map** for `O(n)` time complexity.
         }
 
         // Topic badge if present - modern pill style
-        let topicX: CGFloat = (isStatus || isScreenshot) ? 110 : 32
+        let topicX: CGFloat = (isStatus || isScreenshot || isToolUse || isSource) ? 110 : 32
         if let topic = message.topic, topic != "followUp" && topic != "answer" && topic != "unknown" {
             let topicPill = NSView(frame: NSRect(x: topicX, y: viewHeight - headerHeight + 2, width: 0, height: 18))
             topicPill.wantsLayer = true
@@ -5162,6 +6573,12 @@ The function uses a **hash map** for `O(n)` time complexity.
         contentView.backgroundColor = .clear
         contentView.textContainerInset = .zero
         contentView.textContainer?.lineFragmentPadding = 0
+        contentView.isAutomaticLinkDetectionEnabled = true  // Enable clicking links
+        contentView.linkTextAttributes = [
+            .foregroundColor: NSColor.systemBlue,
+            .underlineStyle: NSUnderlineStyle.single.rawValue,
+            .cursor: NSCursor.pointingHand
+        ]
 
         let attributedContent = formatMessageContent(message.content, isQuestion: isQuestion)
         contentView.textStorage?.setAttributedString(attributedContent)
@@ -5304,8 +6721,8 @@ The function uses a **hash map** for `O(n)` time complexity.
     func formatInlineCode(_ text: String, baseAttrs: [NSAttributedString.Key: Any], codeFont: NSFont) -> NSAttributedString {
         let result = NSMutableAttributedString()
 
-        // Combined pattern for **bold** and `code`
-        let pattern = "\\*\\*([^*]+)\\*\\*|`([^`]+)`"
+        // Combined pattern for **bold**, `code`, and URLs
+        let pattern = "\\*\\*([^*]+)\\*\\*|`([^`]+)`|(https?://[^\\s\\)\\]]+)"
 
         guard let regex = try? NSRegularExpression(pattern: pattern) else {
             return NSAttributedString(string: text, attributes: baseAttrs)
@@ -5323,7 +6740,7 @@ The function uses a **hash map** for `O(n)` time complexity.
                 result.append(NSAttributedString(string: beforeText, attributes: baseAttrs))
             }
 
-            // Check which group matched: group 1 = bold, group 2 = code
+            // Check which group matched: group 1 = bold, group 2 = code, group 3 = URL
             if let boldRange = Range(match.range(at: 1), in: text) {
                 // **bold** text - yellow and bold
                 let boldText = String(text[boldRange])
@@ -5341,6 +6758,21 @@ The function uses a **hash map** for `O(n)` time complexity.
                     .backgroundColor: NSColor.black.withAlphaComponent(0.2)
                 ]
                 result.append(NSAttributedString(string: codeText, attributes: codeAttrs))
+            } else if let urlRange = Range(match.range(at: 3), in: text) {
+                // URL - make it clickable
+                let urlText = String(text[urlRange])
+                if let url = URL(string: urlText) {
+                    let linkAttrs: [NSAttributedString.Key: Any] = [
+                        .font: baseAttrs[.font] ?? NSFont.systemFont(ofSize: 13),
+                        .foregroundColor: NSColor.systemBlue,
+                        .underlineStyle: NSUnderlineStyle.single.rawValue,
+                        .link: url,
+                        .cursor: NSCursor.pointingHand
+                    ]
+                    result.append(NSAttributedString(string: urlText, attributes: linkAttrs))
+                } else {
+                    result.append(NSAttributedString(string: urlText, attributes: baseAttrs))
+                }
             }
 
             lastEnd = matchRange.upperBound
@@ -5369,10 +6801,10 @@ The function uses a **hash map** for `O(n)` time complexity.
 
 @available(macOS 14.0, *)
 @main
-struct InterviewMasterApp {
+struct ConversationAssistantApp {
     static func main() {
         let app = NSApplication.shared
-        let delegate = InterviewMasterDelegate()
+        let delegate = ConversationAssistantDelegate()
         app.delegate = delegate
         app.run()
     }

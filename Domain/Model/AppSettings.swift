@@ -103,8 +103,8 @@ enum AppLanguage: String, CaseIterable {
 class AppSettings {
     static let shared = AppSettings()
 
-    private let languageKey = "InterviewMaster.Language"
-    private let techStackKey = "InterviewMaster.TechStack"
+    private let languageKey = "ConversationAssistant.Language"
+    private let techStackKey = "ConversationAssistant.TechStack"
 
     private init() {}
 

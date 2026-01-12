@@ -3,11 +3,11 @@ import Foundation
 /// Audio source for speaker identification
 enum AudioSource {
     case microphone    // Your voice (you speaking)
-    case systemAudio   // Interviewer voice (Zoom/Teams output)
+    case systemAudio   // Speaker voice (Zoom/Teams output)
 }
 
-/// Represents a message in the interview timeline
-struct InterviewMessage: Identifiable {
+/// Represents a message in the conversation timeline
+struct ConversationMessage: Identifiable {
     let id: UUID
     let timestamp: Date
     let type: MessageType
@@ -18,12 +18,14 @@ struct InterviewMessage: Identifiable {
     var isCollapsed: Bool = true   // For userResponse - collapsed by default
 
     enum MessageType {
-        case question      // Interviewer question
+        case question      // User's question
         case answer        // Generated AI answer
         case userResponse  // User's spoken response (detected as "answer")
         case followUp      // Follow-up answer
         case status        // System status message
         case screenshot    // Screenshot thumbnail in timeline
+        case toolUse       // Tool being used (searching docs, code, etc.)
+        case source        // Source/citation from tool results
     }
 
     init(type: MessageType, content: String, topic: String? = nil, screenshotId: UUID? = nil, audioSource: AudioSource? = nil) {

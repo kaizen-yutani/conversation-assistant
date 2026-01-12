@@ -1,7 +1,7 @@
 import Foundation
 
-/// Groq API client for interview assistance (Whisper STT + LLM)
-class GroqInterviewClient {
+/// Groq API client for speech transcription and LLM responses (Whisper STT + LLM)
+class GroqSpeechClient {
     private let apiKey: String
     private let whisperURL = "https://api.groq.com/openai/v1/audio/transcriptions"
     private let chatURL = "https://api.groq.com/openai/v1/chat/completions"
@@ -52,7 +52,7 @@ class GroqInterviewClient {
         return (result.text, latency)
     }
 
-    /// Generate a concise interview answer for a topic
+    /// Generate a concise answer for a topic
     func generateAnswer(for topic: String, transcription: String, userBackground: String? = nil) async throws -> (answer: String, latencyMs: Double) {
         let startTime = Date()
 
@@ -68,7 +68,7 @@ class GroqInterviewClient {
 
         let languageInstruction = AppSettings.shared.llmLanguageInstruction
         let prompt = """
-        You are helping someone in a technical interview. They need to glance at this answer FAST.
+        You are a helpful assistant. Provide concise, scannable answers.
         \(backgroundContext)
         Question: "\(transcription)"
         Topic: \(topic)
@@ -160,7 +160,7 @@ class GroqInterviewClient {
         Text: "\(combinedText)"
         \(lastTopicNote)
 
-        IMPORTANT: This is speech-to-text from a technical interview. Words may be misheard.
+        IMPORTANT: This is speech-to-text input. Words may be misheard.
         Use context to interpret what makes sense technically (e.g., "Ray vs ArrayList" → Array vs ArrayList).
 
         STATUS (pick one):
