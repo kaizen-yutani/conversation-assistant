@@ -194,32 +194,35 @@ class ToolExecutor {
 /// Convenience extension for processing multiple tool calls
 extension ToolExecutor {
 
-    /// Process multiple tool use requests in parallel and return results
+    /// Process multiple tool use requests in parallel and return results in original order
     /// - Parameter requests: Array of tool use requests from Claude
-    /// - Returns: Array of tool result messages ready for API
+    /// - Returns: Array of tool result messages ready for API (preserves original order)
     func processToolUses(_ requests: [ToolUseRequest]) async -> [ToolResultMessage] {
         let startTime = Date()
         let toolNames = requests.map { $0.name }.joined(separator: ", ")
         NSLog("⚡ Executing \(requests.count) tools in parallel: \(toolNames)")
 
-        // Execute all tools concurrently for better performance
-        let results = await withTaskGroup(of: ToolResultMessage.self) { group in
-            for request in requests {
+        // Execute all tools concurrently, track index to preserve order
+        let indexedResults = await withTaskGroup(of: (Int, ToolResultMessage).self) { group in
+            for (index, request) in requests.enumerated() {
                 group.addTask {
                     let toolStart = Date()
                     let result = await self.execute(toolName: request.name, input: request.input)
                     let toolMs = Date().timeIntervalSince(toolStart) * 1000
                     NSLog("  ✓ \(request.name) completed in %.0fms", toolMs)
-                    return ToolResultMessage(toolUseId: request.id, result: result)
+                    return (index, ToolResultMessage(toolUseId: request.id, result: result))
                 }
             }
 
-            var results: [ToolResultMessage] = []
+            var results: [(Int, ToolResultMessage)] = []
             for await result in group {
                 results.append(result)
             }
             return results
         }
+
+        // Sort by original index to preserve request order
+        let results = indexedResults.sorted { $0.0 < $1.0 }.map { $0.1 }
 
         let totalMs = Date().timeIntervalSince(startTime) * 1000
         NSLog("⚡ All \(requests.count) tools completed in %.0fms (parallel)", totalMs)

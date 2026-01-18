@@ -4288,12 +4288,15 @@ The function uses a **hash map** for `O(n)` time complexity.
                 tools: configuredTools,
                 systemPrompt: systemPrompt,
                 conversationHistory: self.chatHistory,  // Pass multi-turn history
-                onToolUse: { [weak self] toolName in
+                onToolUse: { [weak self] toolNames in
                     DispatchQueue.main.async {
-                        let icon = ToolExecutor.shared.icon(for: toolName)
-                        let displayName = ToolExecutor.shared.displayName(for: toolName)
-                        // Update streaming status instead of adding separate message
-                        self?.updateStreamingStatus("\(icon) Searching \(displayName)...")
+                        // Show all tools being searched at once
+                        let toolsDisplay = toolNames.map { name in
+                            let icon = ToolExecutor.shared.icon(for: name)
+                            let displayName = ToolExecutor.shared.displayName(for: name)
+                            return "\(icon) \(displayName)"
+                        }.joined(separator: ", ")
+                        self?.updateStreamingStatus("Searching \(toolsDisplay)...")
                     }
                 },
                 onChunk: { [weak self] chunk in
@@ -4474,12 +4477,15 @@ The function uses a **hash map** for `O(n)` time complexity.
                     question: transcription,
                     tools: configuredTools,
                     systemPrompt: systemPrompt,
-                    onToolUse: { [weak self] toolName in
+                    onToolUse: { [weak self] toolNames in
                         DispatchQueue.main.async {
-                            let icon = ToolExecutor.shared.icon(for: toolName)
-                            let displayName = ToolExecutor.shared.displayName(for: toolName)
-                            // Update streaming status instead of adding separate message
-                            self?.updateStreamingStatus("\(icon) Searching \(displayName)...")
+                            // Show all tools being searched at once
+                            let toolsDisplay = toolNames.map { name in
+                                let icon = ToolExecutor.shared.icon(for: name)
+                                let displayName = ToolExecutor.shared.displayName(for: name)
+                                return "\(icon) \(displayName)"
+                            }.joined(separator: ", ")
+                            self?.updateStreamingStatus("Searching \(toolsDisplay)...")
                         }
                     },
                     onChunk: { [weak self] chunk in
@@ -5714,13 +5720,16 @@ The function uses a **hash map** for `O(n)` time complexity.
             question: question,
             tools: configuredTools,
             systemPrompt: systemPrompt,
-            onToolUse: { [weak self] toolName in
+            onToolUse: { [weak self] toolNames in
                 guard let self = self else { return }
                 DispatchQueue.main.async {
-                    // Update streaming status instead of adding separate message
-                    let icon = ToolExecutor.shared.icon(for: toolName)
-                    let displayName = ToolExecutor.shared.displayName(for: toolName)
-                    self.updateStreamingStatus("\(icon) Searching \(displayName)...")
+                    // Show all tools being searched at once
+                    let toolsDisplay = toolNames.map { name in
+                        let icon = ToolExecutor.shared.icon(for: name)
+                        let displayName = ToolExecutor.shared.displayName(for: name)
+                        return "\(icon) \(displayName)"
+                    }.joined(separator: ", ")
+                    self.updateStreamingStatus("Searching \(toolsDisplay)...")
                 }
             },
             onChunk: { [weak self] chunk in
@@ -5797,11 +5806,15 @@ The function uses a **hash map** for `O(n)` time complexity.
             tools: configuredTools,
             systemPrompt: systemPrompt,
             conversationHistory: chatHistory,  // Pass multi-turn history
-            onToolUse: { [weak self] (toolName: String) in
+            onToolUse: { [weak self] (toolNames: [String]) in
                 DispatchQueue.main.async {
-                    let icon = ToolExecutor.shared.icon(for: toolName)
-                    let displayName = ToolExecutor.shared.displayName(for: toolName)
-                    self?.updateStreamingStatus("\(icon) Searching \(displayName)...")
+                    // Show all tools being searched at once
+                    let toolsDisplay = toolNames.map { name in
+                        let icon = ToolExecutor.shared.icon(for: name)
+                        let displayName = ToolExecutor.shared.displayName(for: name)
+                        return "\(icon) \(displayName)"
+                    }.joined(separator: ", ")
+                    self?.updateStreamingStatus("Searching \(toolsDisplay)...")
                 }
             },
             onChunk: { [weak self] (chunk: String) in

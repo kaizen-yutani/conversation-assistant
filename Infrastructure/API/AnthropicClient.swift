@@ -671,7 +671,7 @@ When you need more information, indicate you would use available tools.
     ///   - tools: Available tool definitions
     ///   - systemPrompt: Optional system prompt
     ///   - conversationHistory: Optional previous messages for multi-turn context
-    ///   - onToolUse: Callback when a tool is being used (for UI updates)
+    ///   - onToolUse: Callback when tools are being used (for UI updates) - receives array of tool names
     ///   - onChunk: Callback for streaming text chunks
     /// - Returns: The final answer after any tool use
     func chatWithTools(
@@ -679,7 +679,7 @@ When you need more information, indicate you would use available tools.
         tools: [ToolDefinition],
         systemPrompt: String? = nil,
         conversationHistory: ChatHistory? = nil,
-        onToolUse: @escaping (String) -> Void,
+        onToolUse: @escaping ([String]) -> Void,
         onChunk: @escaping (String) -> Void
     ) async -> Result<String, Error> {
         // === LOGGING ===
@@ -724,11 +724,12 @@ When you need more information, indicate you would use available tools.
 
                 // If tool_use, execute tools and continue
                 if toolResponse.stopReason == .toolUse && !toolResponse.toolUses.isEmpty {
-                    // Notify UI about tool usage
+                    // Notify UI about all tools being used at once
+                    let toolNames = toolResponse.toolUses.map { $0.name }
                     for toolUse in toolResponse.toolUses {
                         print("[AnthropicClient] TOOL CALL: \(toolUse.name) with input: \(toolUse.input)")
-                        onToolUse(toolUse.name)
                     }
+                    onToolUse(toolNames)
 
                     // Execute tools
                     let toolResults = await ToolExecutor.shared.processToolUses(toolResponse.toolUses)
