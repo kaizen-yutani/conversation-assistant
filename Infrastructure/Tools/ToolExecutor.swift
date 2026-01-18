@@ -193,18 +193,36 @@ class ToolExecutor {
 
 /// Convenience extension for processing multiple tool calls
 extension ToolExecutor {
-    
-    /// Process multiple tool use requests and return results
+
+    /// Process multiple tool use requests in parallel and return results
     /// - Parameter requests: Array of tool use requests from Claude
     /// - Returns: Array of tool result messages ready for API
     func processToolUses(_ requests: [ToolUseRequest]) async -> [ToolResultMessage] {
-        var results: [ToolResultMessage] = []
-        
-        for request in requests {
-            let result = await execute(toolName: request.name, input: request.input)
-            results.append(ToolResultMessage(toolUseId: request.id, result: result))
+        let startTime = Date()
+        let toolNames = requests.map { $0.name }.joined(separator: ", ")
+        NSLog("⚡ Executing \(requests.count) tools in parallel: \(toolNames)")
+
+        // Execute all tools concurrently for better performance
+        let results = await withTaskGroup(of: ToolResultMessage.self) { group in
+            for request in requests {
+                group.addTask {
+                    let toolStart = Date()
+                    let result = await self.execute(toolName: request.name, input: request.input)
+                    let toolMs = Date().timeIntervalSince(toolStart) * 1000
+                    NSLog("  ✓ \(request.name) completed in %.0fms", toolMs)
+                    return ToolResultMessage(toolUseId: request.id, result: result)
+                }
+            }
+
+            var results: [ToolResultMessage] = []
+            for await result in group {
+                results.append(result)
+            }
+            return results
         }
-        
+
+        let totalMs = Date().timeIntervalSince(startTime) * 1000
+        NSLog("⚡ All \(requests.count) tools completed in %.0fms (parallel)", totalMs)
         return results
     }
 }

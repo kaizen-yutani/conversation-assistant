@@ -86,8 +86,60 @@ class AnthropicClient {
     private let model = "claude-haiku-4-5-20251001"
     private let maxTokens = 4096
 
+    /// Retry configuration (matches Anthropic SDK defaults)
+    private let maxRetries = 2
+    private let retryableStatusCodes: Set<Int> = [408, 409, 429, 500, 502, 503, 529]
+
+    /// Shared URLSession for connection reuse (HTTP/2 multiplexing)
+    private let session: URLSession = {
+        let config = URLSessionConfiguration.default
+        config.timeoutIntervalForRequest = 30
+        config.httpMaximumConnectionsPerHost = 2
+        return URLSession(configuration: config)
+    }()
+
+    /// Track if connection has been warmed up
+    private var isConnectionWarm = false
+
     init(apiKey: String) {
         self.apiKey = apiKey
+    }
+
+    /// Check if an HTTP status code is retryable
+    private func isRetryable(statusCode: Int) -> Bool {
+        retryableStatusCodes.contains(statusCode)
+    }
+
+    /// Calculate exponential backoff delay for retry attempt
+    private func backoffDelay(attempt: Int) -> UInt64 {
+        // Exponential backoff: 1s, 2s, 4s with jitter
+        let baseDelay = pow(2.0, Double(attempt))
+        let jitter = Double.random(in: 0...0.5)
+        return UInt64((baseDelay + jitter) * 1_000_000_000)
+    }
+
+    /// Pre-warm the connection to Anthropic API (DNS + TCP + TLS handshake)
+    /// Call this while STT is running to save ~50-100ms on first request
+    func warmupConnection() async {
+        guard !isConnectionWarm else { return }
+
+        let startTime = Date()
+
+        // HEAD request to establish connection without sending data
+        guard let url = URL(string: "https://api.anthropic.com") else { return }
+        var request = URLRequest(url: url)
+        request.httpMethod = "HEAD"
+        request.timeoutInterval = 5
+
+        do {
+            let _ = try await session.data(for: request)
+            isConnectionWarm = true
+            let latency = Date().timeIntervalSince(startTime) * 1000
+            NSLog("🔥 Anthropic connection warmed up in %.0fms", latency)
+        } catch {
+            // Connection warmup failed, but that's okay - we'll connect on first real request
+            NSLog("⚠️ Connection warmup failed (non-critical): %@", error.localizedDescription)
+        }
     }
 
     /// Quick non-streaming message for interview answers
@@ -109,7 +161,7 @@ class AnthropicClient {
         request.addValue("application/json", forHTTPHeaderField: "content-type")
         request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
 
-        let (data, _) = try await URLSession.shared.data(for: request)
+        let (data, _) = try await session.data(for: request)
         let latency = Date().timeIntervalSince(startTime) * 1000
 
         struct Response: Codable {
@@ -155,7 +207,7 @@ class AnthropicClient {
         }
 
         do {
-            let (bytes, response) = try await URLSession.shared.bytes(for: request)
+            let (bytes, response) = try await session.bytes(for: request)
 
             guard let httpResponse = response as? HTTPURLResponse else {
                 return .failure(NSError(domain: "Invalid response", code: -1))
@@ -309,7 +361,7 @@ When you need more information, indicate you would use available tools.
 
         let requestBody: [String: Any] = [
             "model": model,
-            "max_tokens": 300,
+            "max_tokens": 600,  // Increased for enumeration questions
             "stream": true,
             "system": systemContent,
             "messages": [
@@ -335,7 +387,7 @@ When you need more information, indicate you would use available tools.
         }
 
         do {
-            let (bytes, response) = try await URLSession.shared.bytes(for: request)
+            let (bytes, response) = try await session.bytes(for: request)
 
             guard let httpResponse = response as? HTTPURLResponse else {
                 return .failure(NSError(domain: "Invalid response", code: -1))
@@ -526,7 +578,7 @@ When you need more information, indicate you would use available tools.
         }
 
         do {
-            let (bytes, response) = try await URLSession.shared.bytes(for: request)
+            let (bytes, response) = try await session.bytes(for: request)
 
             guard let httpResponse = response as? HTTPURLResponse else {
                 return .failure(NSError(domain: "Invalid response", code: -1))
@@ -718,7 +770,7 @@ When you need more information, indicate you would use available tools.
         return .failure(NSError(domain: "Max tool use iterations reached", code: -1))
     }
     
-    /// Send a streaming message with tools support
+    /// Send a streaming message with tools support (includes retry with exponential backoff)
     private func sendMessageWithTools(
         messages: [[String: Any]],
         tools: [ToolDefinition],
@@ -731,128 +783,151 @@ When you need more information, indicate you would use available tools.
             "stream": true,
             "messages": messages
         ]
-        
+
         if let system = systemPrompt {
             requestBody["system"] = system
         }
-        
+
         if !tools.isEmpty {
             requestBody["tools"] = tools.map { $0.toDictionary() }
             requestBody["tool_choice"] = ["type": "auto"]
         }
-        
+
         guard let url = URL(string: baseURL) else {
             return .failure(NSError(domain: "Invalid URL", code: -1))
         }
-        
+
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.addValue(apiKey, forHTTPHeaderField: "x-api-key")
         request.addValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
         request.addValue("application/json", forHTTPHeaderField: "content-type")
-        
+
         do {
             request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
         } catch {
             return .failure(error)
         }
-        
-        do {
-            let (bytes, response) = try await URLSession.shared.bytes(for: request)
-            
-            guard let httpResponse = response as? HTTPURLResponse else {
-                return .failure(NSError(domain: "Invalid response", code: -1))
-            }
-            
-            guard (200...299).contains(httpResponse.statusCode) else {
-                var errorMessage = "HTTP \(httpResponse.statusCode)"
-                var errorBody = ""
+
+        // Retry loop with exponential backoff
+        var lastError: Error?
+        for attempt in 0...maxRetries {
+            do {
+                let (bytes, response) = try await session.bytes(for: request)
+
+                guard let httpResponse = response as? HTTPURLResponse else {
+                    return .failure(NSError(domain: "Invalid response", code: -1))
+                }
+
+                // Check for retryable HTTP errors
+                if !(200...299).contains(httpResponse.statusCode) {
+                    var errorMessage = "HTTP \(httpResponse.statusCode)"
+                    var errorBody = ""
+                    for try await line in bytes.lines {
+                        errorBody += line + "\n"
+                        if errorBody.count > 500 { break }
+                    }
+                    if let data = errorBody.data(using: .utf8),
+                       let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                       let error = json["error"] as? [String: Any],
+                       let message = error["message"] as? String {
+                        errorMessage = message
+                    }
+
+                    let error = NSError(domain: errorMessage, code: httpResponse.statusCode)
+
+                    // Retry if retryable and not last attempt
+                    if isRetryable(statusCode: httpResponse.statusCode) && attempt < maxRetries {
+                        lastError = error
+                        try await Task.sleep(nanoseconds: backoffDelay(attempt: attempt))
+                        continue
+                    }
+                    return .failure(error)
+                }
+
+                // Parse SSE stream (success path - no retry once streaming starts)
+                var contentBlocks: [ContentBlock] = []
+                var currentTextContent = ""
+                var currentToolUse: (id: String, name: String, inputJson: String)? = nil
+                var stopReason: StopReason = .endTurn
+
                 for try await line in bytes.lines {
-                    errorBody += line + "\n"
-                    if errorBody.count > 500 { break }
-                }
-                if let data = errorBody.data(using: .utf8),
-                   let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                   let error = json["error"] as? [String: Any],
-                   let message = error["message"] as? String {
-                    errorMessage = message
-                }
-                return .failure(NSError(domain: errorMessage, code: httpResponse.statusCode))
-            }
-            
-            // Parse SSE stream
-            var contentBlocks: [ContentBlock] = []
-            var currentTextContent = ""
-            var currentToolUse: (id: String, name: String, inputJson: String)? = nil
-            var stopReason: StopReason = .endTurn
-            
-            for try await line in bytes.lines {
-                if line.hasPrefix("data: ") {
-                    let jsonString = String(line.dropFirst(6))
-                    if jsonString == "[DONE]" { break }
-                    
-                    guard let data = jsonString.data(using: .utf8),
-                          let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                          let type = json["type"] as? String else { continue }
-                    
-                    switch type {
-                    case "content_block_start":
-                        if let contentBlock = json["content_block"] as? [String: Any],
-                           let blockType = contentBlock["type"] as? String {
-                            if blockType == "tool_use" {
-                                let id = contentBlock["id"] as? String ?? ""
-                                let name = contentBlock["name"] as? String ?? ""
-                                currentToolUse = (id: id, name: name, inputJson: "")
+                    if line.hasPrefix("data: ") {
+                        let jsonString = String(line.dropFirst(6))
+                        if jsonString == "[DONE]" { break }
+
+                        guard let data = jsonString.data(using: .utf8),
+                              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                              let type = json["type"] as? String else { continue }
+
+                        switch type {
+                        case "content_block_start":
+                            if let contentBlock = json["content_block"] as? [String: Any],
+                               let blockType = contentBlock["type"] as? String {
+                                if blockType == "tool_use" {
+                                    let id = contentBlock["id"] as? String ?? ""
+                                    let name = contentBlock["name"] as? String ?? ""
+                                    currentToolUse = (id: id, name: name, inputJson: "")
+                                }
                             }
-                        }
-                        
-                    case "content_block_delta":
-                        if let delta = json["delta"] as? [String: Any] {
-                            if let text = delta["text"] as? String {
-                                currentTextContent += text
-                                onChunk(text)
-                            } else if let partialJson = delta["partial_json"] as? String {
-                                currentToolUse?.inputJson += partialJson
+
+                        case "content_block_delta":
+                            if let delta = json["delta"] as? [String: Any] {
+                                if let text = delta["text"] as? String {
+                                    currentTextContent += text
+                                    onChunk(text)
+                                } else if let partialJson = delta["partial_json"] as? String {
+                                    currentToolUse?.inputJson += partialJson
+                                }
                             }
-                        }
-                        
-                    case "content_block_stop":
-                        // Finalize current block
-                        if let toolUse = currentToolUse {
-                            // Parse the accumulated JSON
-                            var input: [String: Any] = [:]
-                            if let data = toolUse.inputJson.data(using: .utf8),
-                               let parsed = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-                                input = parsed
+
+                        case "content_block_stop":
+                            // Finalize current block
+                            if let toolUse = currentToolUse {
+                                // Parse the accumulated JSON
+                                var input: [String: Any] = [:]
+                                if let data = toolUse.inputJson.data(using: .utf8),
+                                   let parsed = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                                    input = parsed
+                                }
+                                contentBlocks.append(.toolUse(id: toolUse.id, name: toolUse.name, input: input))
+                                currentToolUse = nil
+                            } else if !currentTextContent.isEmpty {
+                                contentBlocks.append(.text(currentTextContent))
+                                currentTextContent = ""
                             }
-                            contentBlocks.append(.toolUse(id: toolUse.id, name: toolUse.name, input: input))
-                            currentToolUse = nil
-                        } else if !currentTextContent.isEmpty {
-                            contentBlocks.append(.text(currentTextContent))
-                            currentTextContent = ""
+
+                        case "message_delta":
+                            if let messageDelta = json["delta"] as? [String: Any],
+                               let reason = messageDelta["stop_reason"] as? String {
+                                stopReason = StopReason(rawValue: reason) ?? .endTurn
+                            }
+
+                        default:
+                            break
                         }
-                        
-                    case "message_delta":
-                        if let messageDelta = json["delta"] as? [String: Any],
-                           let reason = messageDelta["stop_reason"] as? String {
-                            stopReason = StopReason(rawValue: reason) ?? .endTurn
-                        }
-                        
-                    default:
-                        break
                     }
                 }
+
+                // Add any remaining text content
+                if !currentTextContent.isEmpty {
+                    contentBlocks.append(.text(currentTextContent))
+                }
+
+                return .success(ToolUseResponse(contentBlocks: contentBlocks, stopReason: stopReason))
+
+            } catch {
+                // Connection errors - retry if possible
+                if attempt < maxRetries {
+                    lastError = error
+                    try? await Task.sleep(nanoseconds: backoffDelay(attempt: attempt))
+                    continue
+                }
+                return .failure(error)
             }
-            
-            // Add any remaining text content
-            if !currentTextContent.isEmpty {
-                contentBlocks.append(.text(currentTextContent))
-            }
-            
-            return .success(ToolUseResponse(contentBlocks: contentBlocks, stopReason: stopReason))
-            
-        } catch {
-            return .failure(error)
         }
+
+        // Should never reach here, but return last error if we do
+        return .failure(lastError ?? NSError(domain: "Unknown error after retries", code: -1))
     }
 }

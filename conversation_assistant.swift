@@ -120,6 +120,12 @@ class ClaudeLogoView: NSView {
     }
 }
 
+/// Flipped view where Y=0 is at the top (like iOS)
+/// Used for timeline so newest messages appear at top
+class FlippedView: NSView {
+    override var isFlipped: Bool { true }
+}
+
 /// Custom view that captures scroll events for its child scroll view
 class ScrollCaptureView: NSView {
     var scrollView: NSScrollView?
@@ -558,8 +564,9 @@ class ConversationAssistantDelegate: NSObject, NSApplicationDelegate, NSTextView
     var floatingLoadingView: NSView?
     var floatingEventMonitor: Any?
 
-    var vadRecorder: VADAudioRecorder?
+    var vadRecorder: SileroVADRecorder?
     var systemAudioCapture: SystemAudioCapture?
+    var streamingSystemAudioCapture: StreamingSystemAudioCapture?
     var groqClient: GroqSpeechClient?
     var conversationContext = ConversationContext()
     var chatHistory = ChatHistory(maxMessages: 20)  // Multi-turn conversation history
@@ -574,6 +581,7 @@ class ConversationAssistantDelegate: NSObject, NSApplicationDelegate, NSTextView
     let bufferTimeout: TimeInterval = 10.0
     var lastAnswerTime: Date?
     let answerCooldown: TimeInterval = 12.0
+    var questionEndTime: Date?  // For latency tracking
 
     // Deduplication - prevent same audio from being processed twice
     // (mic picking up speaker audio = room echo)
@@ -1787,14 +1795,10 @@ The function uses a **hash map** for `O(n)` time complexity.
         voiceTimelineScrollView.drawsBackground = false
         voiceTimelineScrollView.backgroundColor = .clear
 
-        // Timeline container (grows as messages are added)
-        voiceTimelineContainer = NSView(frame: NSRect(x: 0, y: 0, width: voiceTimelineScrollView.frame.width, height: 100))
+        // Timeline container (grows as messages are added) - flipped so Y=0 is at top
+        voiceTimelineContainer = FlippedView(frame: NSRect(x: 0, y: 0, width: voiceTimelineScrollView.frame.width, height: 100))
         voiceTimelineContainer.autoresizingMask = [.width]
         voiceTimelineScrollView.documentView = voiceTimelineContainer
-
-        // Empty state / Welcome message with friendly styling
-        addVoiceMessage(type: .status, content: "Ready to help\n\nType a message or click Start to begin listening.", topic: nil)
-
         voiceContentView.addSubview(voiceTimelineScrollView)
 
         // Add pinned solution container AFTER timeline so it's on top in z-order
@@ -4013,23 +4017,42 @@ The function uses a **hash map** for `O(n)` time complexity.
     }
 
     func startListening() {
-        // Check for Groq API key
-        if groqApiKey == nil {
-            promptForGroqApiKey()
-            return
-        }
-
         // Check for Anthropic API key (needed for Haiku answers)
         if apiKey == nil {
             showAlert(title: "API Key Required", message: "Please configure your Anthropic API key in Settings (⌘,)")
             return
         }
 
-        // Initialize recorder and clients
-        vadRecorder = VADAudioRecorder()
-        systemAudioCapture = SystemAudioCapture()
-        groqClient = GroqSpeechClient(apiKey: groqApiKey!)
+        // Check if we have at least one transcription method
+        let hasDeepgram = ApiKeyManager.shared.hasKey(.deepgram)
+        let hasGroq = groqApiKey != nil
+
+        if !hasDeepgram && !hasGroq {
+            promptForGroqApiKey()
+            return
+        }
+
+        // Initialize recorder and clients (Silero VAD for 87% accuracy)
+        vadRecorder = SileroVADRecorder()
+        if let groqKey = groqApiKey {
+            groqClient = GroqSpeechClient(apiKey: groqKey)
+        }
         anthropicClient = AnthropicClient(apiKey: apiKey!)
+
+        // Check if streaming STT is available and enabled
+        let useStreaming = AppSettings.shared.useStreamingSTT && ApiKeyManager.shared.hasKey(.deepgram)
+
+        if useStreaming {
+            // Use Deepgram streaming for system audio (faster, real-time)
+            let deepgramKey = ApiKeyManager.shared.getKey(.deepgram)!
+            let language = AppSettings.shared.languageCode
+            streamingSystemAudioCapture = StreamingSystemAudioCapture(deepgramApiKey: deepgramKey, language: language)
+            NSLog("🔊 Using Deepgram streaming STT")
+        } else {
+            // Fallback to Groq batch transcription
+            systemAudioCapture = SystemAudioCapture()
+            NSLog("🔊 Using Groq batch STT")
+        }
 
         // === USER MIC CALLBACKS (your voice) ===
         vadRecorder?.onLevelUpdate = { [weak self] db, isSpeaking in
@@ -4044,27 +4067,60 @@ The function uses a **hash map** for `O(n)` time complexity.
         }
 
         vadRecorder?.onSpeechSegment = { [weak self] audioData in
-            guard let self = self else { return }
+            guard let self = self, self.groqClient != nil else { return }
+            // Pre-warm Anthropic connection while STT is running
+            Task { await self.anthropicClient?.warmupConnection() }
             self.processAudioSegment(audioData, source: .microphone)
         }
 
         // === SYSTEM AUDIO CALLBACKS (what you hear - Zoom/Teams) ===
-        systemAudioCapture?.onStatusChange = { [weak self] _ in
-            // Status updates disabled - UI shows visual feedback
-        }
-
-        systemAudioCapture?.onLevelUpdate = { [weak self] db, isSpeaking in
-            guard let self = self else { return }
-            DispatchQueue.main.async {
-                self.animateWaveform(bars: self.systemWaveformBars, color: .appleGold, isSpeaking: isSpeaking, db: db)
-                // Pulse the speaker icon when system audio is detected
-                self.pulseSpeakerIcon(isSpeaking: isSpeaking, db: db)
+        if useStreaming {
+            // Streaming callbacks - receive transcribed text directly
+            streamingSystemAudioCapture?.onTranscript = { [weak self] text, isFinal in
+                self?.processStreamingTranscript(text, isFinal: isFinal)
             }
-        }
 
-        systemAudioCapture?.onSpeechSegment = { [weak self] audioData in
-            guard let self = self else { return }
-            self.processAudioSegment(audioData, source: .systemAudio)
+            streamingSystemAudioCapture?.onLevelUpdate = { [weak self] db, isSpeaking in
+                guard let self = self else { return }
+                DispatchQueue.main.async {
+                    self.animateWaveform(bars: self.systemWaveformBars, color: .appleGold, isSpeaking: isSpeaking, db: db)
+                    self.pulseSpeakerIcon(isSpeaking: isSpeaking, db: db)
+                }
+            }
+
+            streamingSystemAudioCapture?.onSpeechStart = { [weak self] in
+                // Pre-warm Anthropic connection while speech is being detected
+                Task { await self?.anthropicClient?.warmupConnection() }
+                DispatchQueue.main.async {
+                    self?.voiceStatusLabel.stringValue = "🗣 Speaker detected..."
+                }
+            }
+
+            streamingSystemAudioCapture?.onSpeechEnd = { [weak self] in
+                DispatchQueue.main.async {
+                    self?.voiceStatusLabel.stringValue = "🔊 Listening (streaming)..."
+                }
+            }
+        } else {
+            // Batch callbacks - receive audio data for transcription
+            systemAudioCapture?.onStatusChange = { [weak self] _ in
+                // Status updates disabled - UI shows visual feedback
+            }
+
+            systemAudioCapture?.onLevelUpdate = { [weak self] db, isSpeaking in
+                guard let self = self else { return }
+                DispatchQueue.main.async {
+                    self.animateWaveform(bars: self.systemWaveformBars, color: .appleGold, isSpeaking: isSpeaking, db: db)
+                    self.pulseSpeakerIcon(isSpeaking: isSpeaking, db: db)
+                }
+            }
+
+            systemAudioCapture?.onSpeechSegment = { [weak self] audioData in
+                guard let self = self else { return }
+                // Pre-warm Anthropic connection while STT is running
+                Task { await self.anthropicClient?.warmupConnection() }
+                self.processAudioSegment(audioData, source: .systemAudio)
+            }
         }
 
         // Start listening to BOTH audio sources
@@ -4075,8 +4131,13 @@ The function uses a **hash map** for `O(n)` time complexity.
             // Start system audio capture in background
             Task {
                 do {
-                    try await systemAudioCapture?.startCapturing()
+                    if useStreaming {
+                        try await streamingSystemAudioCapture?.startCapturing()
+                    } else {
+                        try await systemAudioCapture?.startCapturing()
+                    }
                 } catch {
+                    NSLog("⚠️ System audio capture failed: %@", error.localizedDescription)
                     // System audio optional - mic still works
                 }
             }
@@ -4096,8 +4157,6 @@ The function uses a **hash map** for `O(n)` time complexity.
             // Show recording indicator (Dynamic Island style)
             showRecordingIndicator()
 
-            addVoiceMessage(type: .status, content: "Listening...", topic: nil)
-
         } catch {
             showAlert(title: "Audio Error", message: "Could not start audio recording: \(error.localizedDescription)")
         }
@@ -4107,11 +4166,18 @@ The function uses a **hash map** for `O(n)` time complexity.
         vadRecorder?.stopListening()
         vadRecorder = nil
 
-        // Stop system audio capture
+        // Stop system audio capture (streaming or batch)
         Task {
-            await systemAudioCapture?.stopCapturing()
-            await MainActor.run {
-                systemAudioCapture = nil
+            if streamingSystemAudioCapture != nil {
+                await streamingSystemAudioCapture?.stopCapturing()
+                await MainActor.run {
+                    streamingSystemAudioCapture = nil
+                }
+            } else {
+                await systemAudioCapture?.stopCapturing()
+                await MainActor.run {
+                    systemAudioCapture = nil
+                }
             }
         }
 
@@ -4132,9 +4198,6 @@ The function uses a **hash map** for `O(n)` time complexity.
 
         voiceStatusLabel.stringValue = ""
         // Waveform bars reset handled by updateNestButtonState collapse animation
-
-        // Add status to timeline (preserved)
-        addVoiceMessage(type: .status, content: "Session ended", topic: nil)
     }
 
     // MARK: - Text Prompt Input
@@ -4313,14 +4376,15 @@ The function uses a **hash map** for `O(n)` time complexity.
         // Update UI to active state
         updateAskButtonState(active: true)
 
-        // Add status message
-        addVoiceMessage(type: .status, content: "Listening to you...", topic: nil)
-
         // Use Task to handle async operations properly
         Task { @MainActor in
             // Pause system audio capture if session is active
             if isSessionActive {
-                await systemAudioCapture?.stopCapturing()
+                if streamingSystemAudioCapture != nil {
+                    await streamingSystemAudioCapture?.stopCapturing()
+                } else {
+                    await systemAudioCapture?.stopCapturing()
+                }
                 try? await Task.sleep(nanoseconds: 100_000_000)  // 100ms
             }
 
@@ -4379,7 +4443,6 @@ The function uses a **hash map** for `O(n)` time complexity.
                 // Skip empty or very short transcriptions
                 guard transcription.count > 3 else {
                     await MainActor.run {
-                        self.addVoiceMessage(type: .status, content: "No question detected", topic: nil)
                         self.finishDirectQuestion()
                     }
                     return
@@ -4456,7 +4519,6 @@ The function uses a **hash map** for `O(n)` time complexity.
     func cancelDirectQuestion() {
         directQuestionRecorder?.stopListening()
         finishDirectQuestion()
-        addVoiceMessage(type: .status, content: "Question cancelled", topic: nil)
     }
 
     func finishDirectQuestion() {
@@ -4469,7 +4531,11 @@ The function uses a **hash map** for `O(n)` time complexity.
         // Resume system audio capture if session was active
         if isSessionActive {
             Task {
-                try? await systemAudioCapture?.startCapturing()
+                if streamingSystemAudioCapture != nil {
+                    try? await streamingSystemAudioCapture?.startCapturing()
+                } else {
+                    try? await systemAudioCapture?.startCapturing()
+                }
             }
         }
     }
@@ -5009,9 +5075,10 @@ The function uses a **hash map** for `O(n)` time complexity.
                     return
                 }
 
-                // Log transcription (main output)
+                // Log transcription (main output) and record time for latency tracking
                 let sourceIcon = source == .microphone ? "🎤" : "🔊"
                 print("\(sourceIcon) [\(Int(sttLatency))ms] \(trimmed)")
+                await MainActor.run { questionEndTime = Date() }
 
                 // Filter Whisper hallucinations (common artifacts from silence/noise)
                 // Only filter if it's EXACTLY these phrases (not part of a longer sentence)
@@ -5089,12 +5156,11 @@ The function uses a **hash map** for `O(n)` time complexity.
                     if micNeedsTools {
                         await MainActor.run { [self] in
                             showLoading("🔍 Searching...", color: .systemBlue)
-                            addVoiceMessage(type: .question, content: trimmed, topic: "tools", audioSource: .microphone)
                         }
 
                         // Add to context and call tool-enabled flow
                         conversationContext.addUtterance(text: trimmed, topic: "tools", isQuestion: true)
-                        await answerWithToolsForVoice(question: trimmed, topic: "tools", messageType: .question)
+                        await answerWithToolsForVoice(question: trimmed, topic: "tools", messageType: .question, audioSource: .microphone)
                         await MainActor.run { hideLoading() }
                         return
                     }
@@ -5280,7 +5346,9 @@ The function uses a **hash map** for `O(n)` time complexity.
                             addVoiceMessage(type: .question, content: fullText, topic: detectedTopic, audioSource: .systemAudio)
                             if !needsTools {
                                 streamingContent = ""
-                                addStreamingMessage(type: messageType, topic: detectedTopic)
+                                // Calculate latency from question end to answer start
+                                let latencyMs: Int? = questionEndTime.map { Int(Date().timeIntervalSince($0) * 1000) }
+                                addStreamingMessage(type: messageType, topic: detectedTopic, latencyMs: latencyMs)
                             }
                         }
 
@@ -5314,7 +5382,7 @@ The function uses a **hash map** for `O(n)` time complexity.
 
                 // If tool-worthy question detected, call tool-enabled flow
                 if shouldUseTools && !fullText.isEmpty {
-                    await answerWithToolsForVoice(question: fullText, topic: detectedTopic, messageType: messageType)
+                    await answerWithToolsForVoice(question: fullText, topic: detectedTopic, messageType: messageType, audioSource: .systemAudio)
                 }
 
                 await MainActor.run { hideLoading() }
@@ -5325,6 +5393,168 @@ The function uses a **hash map** for `O(n)` time complexity.
                     voiceStatusLabel.stringValue = "Error: \(error.localizedDescription)"
                 }
             }
+        }
+    }
+
+    /// Process streaming transcript from Deepgram (already transcribed text)
+    func processStreamingTranscript(_ text: String, isFinal: Bool) {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+
+        // Partial transcript - just update UI to show real-time transcription
+        if !isFinal {
+            DispatchQueue.main.async { [self] in
+                voiceStatusLabel.stringValue = "🎤 \(trimmed)"
+            }
+            return
+        }
+
+        // Final transcript - process like regular system audio
+        // Skip duplicates
+        if isDuplicateTranscription(trimmed, source: .systemAudio) {
+            return
+        }
+
+        // Log transcription and record time for latency tracking
+        print("🔊 [streaming] \(trimmed)")
+        questionEndTime = Date()
+
+        // Filter Whisper/Deepgram hallucinations
+        let whisperHallucinations = [
+            "thank you", "thank you for watching", "thanks", "thanks for watching",
+            "please subscribe", "like and subscribe", "bye", "goodbye",
+            "you", "the end", "so", "okay", "ok", "right", "hmm", "um", "uh"
+        ]
+        let lowerTrimmed = trimmed.lowercased()
+            .replacingOccurrences(of: "!", with: "")
+            .replacingOccurrences(of: ".", with: "")
+            .replacingOccurrences(of: ",", with: "")
+            .trimmingCharacters(in: .whitespaces)
+
+        if trimmed.count < 30 && whisperHallucinations.contains(where: { lowerTrimmed == $0 }) {
+            return
+        }
+
+        // Filter very short transcriptions
+        if trimmed.count < 5 && !trimmed.contains("?") {
+            return
+        }
+
+        // Skip greetings/fillers
+        let normalizedText = lowerTrimmed
+        let greetingStarts = ["hello", "hi ", "hey ", "good morning", "good afternoon"]
+        let fillerPatterns = ["thank you", "thanks", "yes sure", "yeah sure", "okay", "sure"]
+        let isGreeting = greetingStarts.contains { normalizedText.hasPrefix($0) }
+        let isFiller = fillerPatterns.contains { normalizedText.hasPrefix($0) || normalizedText == $0 }
+        let questionWords = ["what", "how", "why", "when", "where", "which", "who", "can you", "could you", "tell me", "explain", "describe"]
+        let hasQuestionWord = questionWords.contains { normalizedText.contains($0) }
+
+        if (isGreeting || isFiller) && normalizedText.count < 50 && !hasQuestionWord {
+            return
+        }
+
+        // Process with classification/answering (same as regular flow)
+        Task {
+            guard let haiku = anthropicClient else { return }
+
+            await MainActor.run { showLoading("🔍 Analyzing...", color: .applePurple) }
+
+            let userBackground = await MainActor.run { self.textView.string }
+            let conversationHistory = conversationContext.getFullConversation()
+            let topicsSummary = conversationContext.getTopicsSummary()
+            let pinnedSolution = currentPinnedSolution
+
+            var shouldStreamAnswer = false
+            var shouldUseTools = false
+            var detectedTopic: String = "unknown"
+            var messageType: ConversationMessage.MessageType = .answer
+            var fullText = ""
+
+            let toolKeywords = ["jira", "ticket", "sprint", "backlog", "issue", "confluence", "documentation", "wiki", "page"]
+
+            let result = await haiku.classifyAndStreamAnswer(
+                transcription: trimmed,
+                buffer: utteranceBuffer,
+                lastTopic: conversationContext.lastTopic,
+                userBackground: userBackground.isEmpty ? nil : userBackground,
+                conversationHistory: conversationHistory,
+                topicsSummary: topicsSummary,
+                pinnedSolution: pinnedSolution,
+                onClassification: { [self] classification in
+                    print("→ \(classification.status) | topic: \(classification.topic ?? "unknown")")
+
+                    if classification.status == "filler" { return }
+
+                    let combinedForCheck = utteranceBuffer.isEmpty ? trimmed : "\(utteranceBuffer) \(trimmed)"
+                    if classification.status == "question" && combinedForCheck.trimmingCharacters(in: .whitespaces).hasSuffix(",") {
+                        utteranceBuffer = combinedForCheck
+                        bufferTimestamp = Date()
+                        return
+                    }
+
+                    if classification.status == "incomplete" {
+                        utteranceBuffer = utteranceBuffer.isEmpty ? trimmed : "\(utteranceBuffer) \(trimmed)"
+                        bufferTimestamp = Date()
+                        return
+                    }
+
+                    fullText = utteranceBuffer.isEmpty ? trimmed : "\(utteranceBuffer) \(trimmed)"
+                    utteranceBuffer = ""
+                    detectedTopic = classification.topic ?? "unknown"
+
+                    if classification.status == "answer" {
+                        conversationContext.addUtterance(text: fullText, topic: detectedTopic)
+                        return
+                    }
+
+                    // Question detected
+                    let questionLower = fullText.lowercased()
+                    if toolKeywords.contains(where: { questionLower.contains($0) }) && ToolExecutor.shared.hasConfiguredTools {
+                        shouldUseTools = true
+                        return
+                    }
+
+                    shouldStreamAnswer = true
+                    messageType = .answer
+
+                    // Create question + streaming message on main thread
+                    DispatchQueue.main.async { [self] in
+                        // Add question first
+                        addVoiceMessage(type: .question, content: fullText, topic: detectedTopic, audioSource: .systemAudio)
+                        streamingContent = ""
+                        // Calculate latency from question end to answer start
+                        let latencyMs: Int? = questionEndTime.map { Int(Date().timeIntervalSince($0) * 1000) }
+                        addStreamingMessage(type: messageType, topic: detectedTopic, latencyMs: latencyMs)
+                    }
+                },
+                onAnswerChunk: { [weak self] chunk in
+                    guard let self = self, shouldStreamAnswer else { return }
+                    DispatchQueue.main.async {
+                        self.streamingContent += chunk
+                        self.updateStreamingMessage(self.streamingContent)
+                    }
+                }
+            )
+
+            if case .failure(let error) = result {
+                print("❌ Classification error: \(error)")
+            }
+
+            if shouldUseTools {
+                await MainActor.run { [self] in
+                    showLoading("🔍 Searching...", color: .systemBlue)
+                }
+                conversationContext.addUtterance(text: fullText, topic: detectedTopic, isQuestion: true)
+                await answerWithToolsForVoice(question: fullText, topic: detectedTopic, messageType: .question, audioSource: .systemAudio)
+            } else if shouldStreamAnswer {
+                conversationContext.addUtterance(text: fullText, topic: detectedTopic, isQuestion: true)
+                await MainActor.run { [self] in
+                    lastAnswerTime = Date()
+                    finalizeStreamingMessage(streamingContent)
+                }
+            }
+
+            await MainActor.run { hideLoading() }
         }
     }
 
@@ -5515,7 +5745,7 @@ The function uses a **hash map** for `O(n)` time complexity.
     }
 
     /// Answer voice questions using tools (Jira, Confluence, etc.)
-    func answerWithToolsForVoice(question: String, topic: String, messageType: ConversationMessage.MessageType) async {
+    func answerWithToolsForVoice(question: String, topic: String, messageType: ConversationMessage.MessageType, audioSource: AudioSource = .systemAudio) async {
         guard let anthropicKey = ApiKeyManager.shared.getKey(.anthropic) else { return }
 
         let client = AnthropicClient(apiKey: anthropicKey)
@@ -5553,8 +5783,9 @@ The function uses a **hash map** for `O(n)` time complexity.
         Tech stack: \(AppSettings.shared.techStack.displayName)
         """
 
-        // Set up streaming UI
+        // Set up streaming UI - add question first, then streaming answer
         await MainActor.run { [self] in
+            addVoiceMessage(type: .question, content: question, topic: topic, audioSource: audioSource)
             streamingContent = ""
             addStreamingMessage(type: messageType, topic: topic)
         }
@@ -5602,8 +5833,8 @@ The function uses a **hash map** for `O(n)` time complexity.
     }
 
     /// Add an empty streaming message that will be updated
-    func addStreamingMessage(type: ConversationMessage.MessageType, topic: String?) {
-        let message = ConversationMessage(type: type, content: "▌", topic: topic)
+    func addStreamingMessage(type: ConversationMessage.MessageType, topic: String?, latencyMs: Int? = nil) {
+        let message = ConversationMessage(type: type, content: "▌", topic: topic, responseLatencyMs: latencyMs)
         voiceMessages.append(message)
 
         // Layout: A badge indented 20px, card after badge
@@ -5658,6 +5889,18 @@ The function uses a **hash map** for `O(n)` time complexity.
             container.addSubview(iconView)
         }
 
+        // Latency label (if available)
+        var latencyLabelWidth: CGFloat = 0
+        if let latency = message.displayLatency {
+            let latencyLabel = NSTextField(labelWithString: "⚡\(latency)")
+            latencyLabel.font = .monospacedDigitSystemFont(ofSize: 10, weight: .medium)
+            latencyLabel.textColor = NSColor.appleGreen.withAlphaComponent(0.7)
+            latencyLabel.sizeToFit()
+            latencyLabelWidth = latencyLabel.frame.width + 8
+            latencyLabel.frame = NSRect(x: cardWidth - 80 - latencyLabelWidth, y: initialHeight - 22, width: latencyLabel.frame.width, height: 16)
+            container.addSubview(latencyLabel)
+        }
+
         // Time label
         let timeLabel = NSTextField(labelWithString: message.displayTime)
         timeLabel.frame = NSRect(x: cardWidth - 80, y: initialHeight - 22, width: 70, height: 16)
@@ -5672,6 +5915,7 @@ The function uses a **hash map** for `O(n)` time complexity.
             topicPill.wantsLayer = true
             topicPill.layer?.backgroundColor = NSColor.appleGreen.withAlphaComponent(0.15).cgColor
             topicPill.layer?.cornerRadius = 9
+            topicPill.identifier = NSUserInterfaceItemIdentifier("streamingTopicPill")
 
             let topicLabel = NSTextField(labelWithString: topic.lowercased())
             topicLabel.font = .systemFont(ofSize: 10, weight: .medium)
@@ -5701,7 +5945,8 @@ The function uses a **hash map** for `O(n)` time complexity.
         container.addSubview(loadingLabel)
 
         // Streaming text view (hidden initially)
-        let textView = NSTextView(frame: NSRect(x: 12, y: 10, width: cardWidth - 24, height: initialHeight - 40))
+        // Position at contentPadding (12) to match createMessageView
+        let textView = NSTextView(frame: NSRect(x: 12, y: 12, width: cardWidth - 24, height: initialHeight - 40))
         textView.isEditable = false
         textView.isSelectable = true
         textView.drawsBackground = false
@@ -5726,13 +5971,24 @@ The function uses a **hash map** for `O(n)` time complexity.
         currentStreamingTextView = textView
         currentStreamingContainer = container
 
-        // Push existing messages up
-        let newMessageHeight = initialHeight + 15
+        // Streaming answers appear below the question (which is at top)
+        var topMessageMaxY: CGFloat = 10
         for subview in voiceTimelineContainer.subviews {
-            subview.frame.origin.y += newMessageHeight
+            if subview.frame.origin.y < 20 {  // Find question at top
+                topMessageMaxY = subview.frame.maxY + 15
+                break
+            }
         }
 
-        outerContainer.frame.origin.y = 10
+        // Push messages below the answer position
+        let newMessageHeight = outerContainer.frame.height + 15
+        for subview in voiceTimelineContainer.subviews {
+            if subview.frame.origin.y >= topMessageMaxY {
+                subview.frame.origin.y += newMessageHeight
+            }
+        }
+
+        outerContainer.frame.origin.y = topMessageMaxY
         voiceTimelineContainer.addSubview(outerContainer)
 
         // Update container height
@@ -5741,6 +5997,8 @@ The function uses a **hash map** for `O(n)` time complexity.
             maxY = max(maxY, subview.frame.maxY)
         }
         voiceTimelineContainer.frame.size.height = max(voiceTimelineScrollView.frame.height, maxY + 20)
+
+        // Scroll to top to show newest
         voiceTimelineScrollView.contentView.scroll(to: NSPoint(x: 0, y: 0))
     }
 
@@ -5775,9 +6033,10 @@ The function uses a **hash map** for `O(n)` time complexity.
         textView.textStorage?.setAttributedString(mutableContent)
 
         // Dynamically resize container as content grows
+        // Use same formula as createMessageView: headerHeight(28) + contentPadding*2(24) = 52
         let width = container.frame.width - 30
         let newTextHeight = max(40, estimateTextHeight(content, width: width))
-        let newContainerHeight = newTextHeight + 40
+        let newContainerHeight = max(newTextHeight + 52, 60)
 
         if newContainerHeight > container.frame.height {
             let heightDiff = newContainerHeight - container.frame.height
@@ -5801,9 +6060,11 @@ The function uses a **hash map** for `O(n)` time complexity.
                 lineView.frame.size.height = newContainerHeight
             }
 
-            // Update icon and labels position
+            // Update icon, labels, and topic pill position
             for subview in container.subviews {
-                if subview is NSTextField || subview is NSImageView {
+                let isHeaderElement = subview is NSTextField || subview is NSImageView ||
+                                      subview.identifier?.rawValue == "streamingTopicPill"
+                if isHeaderElement {
                     if subview.identifier?.rawValue != "streamingText" &&
                        subview.identifier?.rawValue != "streamingSpinner" &&
                        subview.identifier?.rawValue != "streamingLoadingLabel" {
@@ -5812,10 +6073,13 @@ The function uses a **hash map** for `O(n)` time complexity.
                 }
             }
 
-            // Push other messages up (compare with outer container)
+            // Push only messages BELOW the answer - skip the question at top
             let outerContainer = container.superview ?? container
             for subview in voiceTimelineContainer.subviews where subview != outerContainer {
-                subview.frame.origin.y += heightDiff
+                // Don't push the question (which sits at y ≈ 10)
+                if subview.frame.origin.y > 30 {
+                    subview.frame.origin.y += heightDiff
+                }
             }
 
             // Update total container height
@@ -5845,10 +6109,11 @@ The function uses a **hash map** for `O(n)` time complexity.
         let attributedContent = formatMessageContent(content, isQuestion: false)
         textView.textStorage?.setAttributedString(attributedContent)
 
-        // Recalculate height
+        // Recalculate height - use same formula as createMessageView
+        // headerHeight(28) + contentPadding*2(24) = 52
         let width = container.frame.width - 30
         let newTextHeight = estimateTextHeight(content, width: width)
-        let newContainerHeight = newTextHeight + 40
+        let newContainerHeight = max(newTextHeight + 52, 60)
 
         // Calculate height difference
         let heightDiff = newContainerHeight - container.frame.height
@@ -5857,22 +6122,37 @@ The function uses a **hash map** for `O(n)` time complexity.
         container.frame.size.height = newContainerHeight
         textView.frame.size.height = newTextHeight
 
+        // Update outer container if exists
+        if let outer = container.superview, outer.identifier?.rawValue == "streamingOuter" {
+            outer.frame.size.height = newContainerHeight
+            // Update badge position
+            if let badge = outer.subviews.first(where: { $0.identifier?.rawValue == "streamingBadge" }) {
+                badge.frame.origin.y = newContainerHeight - 26
+            }
+        }
+
         // Update line height
         if let lineView = container.subviews.first(where: { $0.identifier?.rawValue == "streamingLine" }) {
             lineView.frame.size.height = newContainerHeight
         }
 
-        // Update time label position
+        // Update header elements position (icon, labels, topic pill)
         for subview in container.subviews {
-            if subview is NSTextField && subview != textView {
-                subview.frame.origin.y = newContainerHeight - 20
+            let isHeaderElement = subview is NSTextField || subview is NSImageView ||
+                                  subview.identifier?.rawValue == "streamingTopicPill"
+            if isHeaderElement && subview.identifier?.rawValue != "streamingText" {
+                subview.frame.origin.y = newContainerHeight - 22
             }
         }
 
-        // Push other messages up if height changed
+        // Push only messages BELOW the answer if height changed - skip question at top
         if heightDiff > 0 {
-            for subview in voiceTimelineContainer.subviews where subview != container {
-                subview.frame.origin.y += heightDiff
+            let outerContainer = container.superview ?? container
+            for subview in voiceTimelineContainer.subviews where subview != outerContainer && subview != container {
+                // Don't push the question (which sits at y ≈ 10)
+                if subview.frame.origin.y > 30 {
+                    subview.frame.origin.y += heightDiff
+                }
             }
         }
 
@@ -5937,27 +6217,47 @@ The function uses a **hash map** for `O(n)` time complexity.
         // Create message view
         let messageView = createMessageView(for: message)
 
-        // Calculate total height needed for new message
-        let newMessageHeight = messageView.frame.height + 15
+        // Questions and new topics: push everything down, add at top
+        // Answers and follow-ups: add below the most recent message (don't push it)
+        let isNewTopic = (type == .question || type == .status || type == .screenshot)
 
-        // Push all existing messages up to make room for new message at bottom
-        for subview in voiceTimelineContainer.subviews {
-            subview.frame.origin.y += newMessageHeight
+        if isNewTopic {
+            // Push all existing messages down to make room
+            let newMessageHeight = messageView.frame.height + 15
+            for subview in voiceTimelineContainer.subviews {
+                subview.frame.origin.y += newMessageHeight
+            }
+            // Position at top
+            messageView.frame.origin.y = 10
+        } else {
+            // Answer/follow-up: find the top-most message and add below it
+            var topMessageMaxY: CGFloat = 10
+            for subview in voiceTimelineContainer.subviews {
+                if subview.frame.origin.y < 20 {  // Find message at top (Y~10)
+                    topMessageMaxY = subview.frame.maxY + 15
+                    break
+                }
+            }
+            // Push messages below the answer position
+            let newMessageHeight = messageView.frame.height + 15
+            for subview in voiceTimelineContainer.subviews {
+                if subview.frame.origin.y >= topMessageMaxY {
+                    subview.frame.origin.y += newMessageHeight
+                }
+            }
+            messageView.frame.origin.y = topMessageMaxY
         }
 
-        // Position new message at the bottom
-        messageView.frame.origin.y = 10
         voiceTimelineContainer.addSubview(messageView)
 
-        // Calculate total content height
+        // Update container height
         var maxY: CGFloat = 0
         for subview in voiceTimelineContainer.subviews {
             maxY = max(maxY, subview.frame.maxY)
         }
-        let newHeight = max(voiceTimelineScrollView.frame.height, maxY + 20)
-        voiceTimelineContainer.frame.size.height = newHeight
+        voiceTimelineContainer.frame.size.height = max(voiceTimelineScrollView.frame.height, maxY + 20)
 
-        // Auto-scroll to bottom (where newest message is)
+        // Scroll to top to show newest
         voiceTimelineScrollView.contentView.scroll(to: NSPoint(x: 0, y: 0))
 
         // Update floating window Q&A if visible (real-time sync)
@@ -6004,15 +6304,13 @@ The function uses a **hash map** for `O(n)` time complexity.
         // Create collapsed message view
         let messageView = createCollapsedUserResponseView(for: message)
 
-        // Calculate total height needed for new message
+        // Push all existing messages down to make room for new message at top
         let newMessageHeight = messageView.frame.height + 15
-
-        // Push all existing messages up
         for subview in voiceTimelineContainer.subviews {
             subview.frame.origin.y += newMessageHeight
         }
 
-        // Position new message at bottom
+        // Position new message at top (Y=10 in flipped view = visually at top)
         messageView.frame.origin.y = 10
         voiceTimelineContainer.addSubview(messageView)
 
@@ -6022,6 +6320,8 @@ The function uses a **hash map** for `O(n)` time complexity.
             maxY = max(maxY, subview.frame.maxY)
         }
         voiceTimelineContainer.frame.size.height = max(voiceTimelineScrollView.frame.height, maxY + 20)
+
+        // Scroll to top to show newest
         voiceTimelineScrollView.contentView.scroll(to: NSPoint(x: 0, y: 0))
     }
 
@@ -6311,13 +6611,15 @@ The function uses a **hash map** for `O(n)` time complexity.
 
         card.addSubview(scrollView)
 
-        // Push existing messages up
-        let newMessageHeight = containerHeight + 15
+        // Normal chat flow: add screenshot at the bottom
+        var currentMaxY: CGFloat = 10
         for subview in voiceTimelineContainer.subviews {
-            subview.frame.origin.y += newMessageHeight
+            currentMaxY = max(currentMaxY, subview.frame.maxY)
         }
 
-        outerContainer.frame.origin.y = 10
+        // Position screenshot at the bottom with margin
+        let margin: CGFloat = voiceTimelineContainer.subviews.isEmpty ? 0 : 15
+        outerContainer.frame.origin.y = currentMaxY + margin
         voiceTimelineContainer.addSubview(outerContainer)
 
         // Update container height
@@ -6326,7 +6628,10 @@ The function uses a **hash map** for `O(n)` time complexity.
             maxY = max(maxY, subview.frame.maxY)
         }
         voiceTimelineContainer.frame.size.height = max(voiceTimelineScrollView.frame.height, maxY + 20)
-        voiceTimelineScrollView.contentView.scroll(to: NSPoint(x: 0, y: 0))
+
+        // Scroll to bottom to show newest message
+        let scrollY = max(0, voiceTimelineContainer.frame.height - voiceTimelineScrollView.frame.height)
+        voiceTimelineScrollView.contentView.scroll(to: NSPoint(x: 0, y: scrollY))
     }
 
     @objc func screenshotThumbnailClicked(_ sender: NSButton) {
