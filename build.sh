@@ -20,8 +20,11 @@ swiftc -o "${APP_NAME}" \
     Infrastructure/Capture/ScreenCaptureService.swift \
     Infrastructure/Capture/MacScreenCapture.swift \
     Infrastructure/Speech/VADAudioRecorder.swift \
+    Infrastructure/Speech/SileroVADRecorder.swift \
     Infrastructure/Speech/SystemAudioCapture.swift \
     Infrastructure/Speech/GroqSpeechClient.swift \
+    Infrastructure/Speech/DeepgramStreamingClient.swift \
+    Infrastructure/Speech/StreamingSystemAudioCapture.swift \
     Infrastructure/QADatabase.swift \
     Infrastructure/Storage/ApiKeyManager.swift \
     Infrastructure/Tools/ToolDefinitions.swift \
@@ -42,13 +45,17 @@ swiftc -o "${APP_NAME}" \
     Presentation/Windows/WindowFactory.swift \
     Presentation/Onboarding/PermissionsOnboardingWindow.swift \
     Presentation/Onboarding/AtlassianOnboardingWindow.swift \
+    Presentation/Timeline/MessageViewFactory.swift \
+    Presentation/Timeline/StreamingMessageHandler.swift \
     -framework Cocoa \
     -framework Carbon \
     -framework ScreenCaptureKit \
     -framework AVFoundation \
     -framework Speech \
     -framework Security \
-    -framework Network
+    -framework Network \
+    -framework CoreML \
+    -framework Accelerate
 
 if [ $? -ne 0 ]; then
     echo "❌ Build failed"
@@ -62,6 +69,12 @@ rm -rf "${APP_BUNDLE}"
 mkdir -p "${APP_BUNDLE}/Contents/MacOS"
 mkdir -p "${APP_BUNDLE}/Contents/Resources"
 mv "${APP_NAME}" "${APP_BUNDLE}/Contents/MacOS/"
+
+# Copy Silero VAD model
+if [ -d "SileroVAD.mlmodelc" ]; then
+    cp -r SileroVAD.mlmodelc "${APP_BUNDLE}/Contents/Resources/"
+    echo "✅ Copied SileroVAD model"
+fi
 
 # Create Info.plist
 cat > "${APP_BUNDLE}/Contents/Info.plist" << 'EOF'

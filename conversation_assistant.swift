@@ -4054,24 +4054,24 @@ The function uses a **hash map** for `O(n)` time complexity.
             NSLog("🔊 Using Groq batch STT")
         }
 
-        // === USER MIC CALLBACKS (your voice) ===
-        vadRecorder?.onLevelUpdate = { [weak self] db, isSpeaking in
-            guard let self = self else { return }
-            DispatchQueue.main.async {
-                self.pulseMicIcon(isSpeaking: isSpeaking, db: db)
-            }
-        }
-
-        vadRecorder?.onStatusChange = { [weak self] _ in
-            // Status updates disabled - UI shows visual feedback
-        }
-
-        vadRecorder?.onSpeechSegment = { [weak self] audioData in
-            guard let self = self, self.groqClient != nil else { return }
-            // Pre-warm Anthropic connection while STT is running
-            Task { await self.anthropicClient?.warmupConnection() }
-            self.processAudioSegment(audioData, source: .microphone)
-        }
+        // === USER MIC DISABLED - using system audio only ===
+        // vadRecorder?.onLevelUpdate = { [weak self] db, isSpeaking in
+        //     guard let self = self else { return }
+        //     DispatchQueue.main.async {
+        //         self.pulseMicIcon(isSpeaking: isSpeaking, db: db)
+        //     }
+        // }
+        //
+        // vadRecorder?.onStatusChange = { [weak self] _ in
+        //     // Status updates disabled - UI shows visual feedback
+        // }
+        //
+        // vadRecorder?.onSpeechSegment = { [weak self] audioData in
+        //     guard let self = self, self.groqClient != nil else { return }
+        //     // Pre-warm Anthropic connection while STT is running
+        //     Task { await self.anthropicClient?.warmupConnection() }
+        //     self.processAudioSegment(audioData, source: .microphone)
+        // }
 
         // === SYSTEM AUDIO CALLBACKS (what you hear - Zoom/Teams) ===
         if useStreaming {
@@ -4123,10 +4123,10 @@ The function uses a **hash map** for `O(n)` time complexity.
             }
         }
 
-        // Start listening to BOTH audio sources
+        // Start listening to system audio only (mic disabled)
         do {
-            // Start user mic capture
-            try vadRecorder?.startListening()
+            // Mic disabled - using system audio only
+            // try vadRecorder?.startListening()
 
             // Start system audio capture in background
             Task {

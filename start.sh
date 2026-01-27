@@ -18,8 +18,11 @@ swiftc -O \
     Infrastructure/Capture/ScreenCaptureService.swift \
     Infrastructure/Capture/MacScreenCapture.swift \
     Infrastructure/Speech/VADAudioRecorder.swift \
+    Infrastructure/Speech/SileroVADRecorder.swift \
     Infrastructure/Speech/SystemAudioCapture.swift \
     Infrastructure/Speech/GroqSpeechClient.swift \
+    Infrastructure/Speech/DeepgramStreamingClient.swift \
+    Infrastructure/Speech/StreamingSystemAudioCapture.swift \
     Infrastructure/QADatabase.swift \
     Infrastructure/Storage/ApiKeyManager.swift \
     Infrastructure/Tools/ToolDefinitions.swift \
@@ -32,18 +35,26 @@ swiftc -O \
     Infrastructure/Tools/Clients/WebSearchClient.swift \
     Infrastructure/Auth/OAuthConfig.swift \
     Infrastructure/Auth/OAuthManager.swift \
+    Infrastructure/Auth/OAuthCallbackServer.swift \
     Presentation/Settings/SettingsWindowController.swift \
     Presentation/Styling/SyntaxHighlighter.swift \
     Presentation/Styling/MarkdownRenderer.swift \
     Presentation/Windows/ScreenshotAlertWindow.swift \
     Presentation/Windows/WindowFactory.swift \
+    Presentation/Onboarding/PermissionsOnboardingWindow.swift \
+    Presentation/Onboarding/AtlassianOnboardingWindow.swift \
+    Presentation/Timeline/MessageViewFactory.swift \
+    Presentation/Timeline/StreamingMessageHandler.swift \
     -o ConversationAssistant \
     -framework Cocoa \
     -framework Carbon \
     -framework ScreenCaptureKit \
     -framework AVFoundation \
     -framework Speech \
-    -framework Security
+    -framework Security \
+    -framework Network \
+    -framework CoreML \
+    -framework Accelerate
 
 # Run if compilation succeeded
 if [ $? -eq 0 ]; then
