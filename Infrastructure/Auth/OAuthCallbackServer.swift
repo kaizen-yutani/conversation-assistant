@@ -156,11 +156,17 @@ final class OAuthCallbackServer {
         print("[OAuthCallbackServer] Received request: \(request.prefix(100))...")
 
         // Parse and respond
-        if let code = parseAuthorizationCode(from: request) {
+        let parseResult = parseAuthorizationCode(from: request)
+        if let code = parseResult.code {
             print("[OAuthCallbackServer] Got authorization code")
             sendSuccessResponse(to: clientSocket)
             close(clientSocket)
             complete(code: code, error: nil)
+        } else if parseResult.stateMismatch {
+            print("[OAuthCallbackServer] State mismatch - CSRF validation failed")
+            sendErrorResponse(to: clientSocket, error: "Security validation failed (state mismatch)")
+            close(clientSocket)
+            complete(code: nil, error: OAuthCallbackError.authorizationDenied("State parameter mismatch — possible CSRF attack"))
         } else if request.contains("error=") {
             let errorDesc = parseError(from: request)
             print("[OAuthCallbackServer] OAuth error: \(errorDesc)")
@@ -189,15 +195,15 @@ final class OAuthCallbackServer {
 
     // MARK: - Parsing
 
-    private func parseAuthorizationCode(from request: String) -> String? {
+    private func parseAuthorizationCode(from request: String) -> (code: String?, stateMismatch: Bool) {
         guard let firstLine = request.components(separatedBy: "\r\n").first,
               firstLine.contains("/callback?") else {
-            return nil
+            return (nil, false)
         }
 
         guard let queryStart = firstLine.range(of: "?"),
               let queryEnd = firstLine.range(of: " HTTP") else {
-            return nil
+            return (nil, false)
         }
 
         let queryString = String(firstLine[queryStart.upperBound..<queryEnd.lowerBound])
@@ -207,12 +213,13 @@ final class OAuthCallbackServer {
         if let expectedState = expectedState {
             let returnedState = components?.queryItems?.first(where: { $0.name == "state" })?.value
             guard returnedState == expectedState else {
-                NSLog("OAuth: State mismatch in callback server — possible CSRF attack")
-                return nil
+                NSLog("OAuth: State mismatch in callback server — expected: \(expectedState.prefix(8))..., got: \(returnedState?.prefix(8) ?? "nil")...")
+                return (nil, true)
             }
         }
 
-        return components?.queryItems?.first(where: { $0.name == "code" })?.value
+        let code = components?.queryItems?.first(where: { $0.name == "code" })?.value
+        return (code, false)
     }
 
     private func parseError(from request: String) -> String {

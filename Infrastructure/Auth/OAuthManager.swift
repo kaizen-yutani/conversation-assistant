@@ -28,8 +28,10 @@ class OAuthManager {
     /// Initiates OAuth flow for the given provider
     func startOAuthFlow(for provider: OAuthProvider) {
         print("[OAuthManager] startOAuthFlow called for \(provider.rawValue)")
+        print("[OAuthManager] clientId present: \(!provider.clientId.isEmpty), clientSecret present: \(!provider.clientSecret.isEmpty)")
+        print("[OAuthManager] Loaded credentials count: \(OAuthConfig.credentials.count)")
         guard provider.isConfigured else {
-            print("[OAuthManager] Provider \(provider.rawValue) is NOT configured")
+            print("[OAuthManager] Provider \(provider.rawValue) is NOT configured — check ~/.conversation-assistant-oauth")
             NSLog("OAuth: Provider \(provider.rawValue) is not configured")
             NotificationCenter.default.post(
                 name: .oauthFailed,
@@ -84,8 +86,17 @@ class OAuthManager {
             return
         }
 
-        NSLog("OAuth: Opening authorization URL for \(provider.rawValue)")
-        NSWorkspace.shared.open(url)
+        NSLog("OAuth: Opening authorization URL for \(provider.rawValue): \(url.absoluteString.prefix(200))...")
+        print("[OAuthManager] Opening URL: \(url.absoluteString)")
+        let opened = NSWorkspace.shared.open(url)
+        if !opened {
+            NSLog("OAuth: Failed to open browser for authorization URL")
+            NotificationCenter.default.post(
+                name: .oauthFailed,
+                object: nil,
+                userInfo: ["provider": provider, "error": "Could not open browser. Please check your default browser settings."]
+            )
+        }
     }
 
     /// Starts OAuth flow using local HTTP callback server (Claude Code plugin style)
@@ -134,7 +145,11 @@ class OAuthManager {
                 }
 
                 NSLog("OAuth: Server ready on \(callbackURL), opening browser...")
-                NSWorkspace.shared.open(url)
+                print("[OAuthManager] Opening URL: \(url.absoluteString)")
+                let opened = NSWorkspace.shared.open(url)
+                if !opened {
+                    NSLog("OAuth: Failed to open browser for authorization URL")
+                }
             },
             completion: { [weak self] code, error in
                 guard let self = self else { return }

@@ -712,6 +712,25 @@ class ConversationAssistantDelegate: NSObject, NSApplicationDelegate, NSTextView
         ) { [weak self] _ in
             self?.updateStatusBarIndicators()
         }
+
+        // Listen for OAuth failures (show alert from main window)
+        NotificationCenter.default.addObserver(
+            forName: .oauthFailed,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            guard let self = self else { return }
+            let provider = notification.userInfo?["provider"] as? OAuthProvider
+            let error = notification.userInfo?["error"] as? String ?? "Unknown error"
+            let providerName = provider?.displayName ?? "service"
+
+            let alert = NSAlert()
+            alert.messageText = "Connection Failed"
+            alert.informativeText = "Failed to connect \(providerName): \(error)"
+            alert.alertStyle = .warning
+            alert.addButton(withTitle: "OK")
+            alert.beginSheetModal(for: self.window, completionHandler: nil)
+        }
     }
 
     private func registerURLHandler() {
