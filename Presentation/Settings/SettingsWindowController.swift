@@ -34,24 +34,24 @@ final class SettingsWindowController: NSWindowController {
     
     // Design constants
     private struct Design {
-        static let cardCornerRadius: CGFloat = 14
+        static let cardCornerRadius: CGFloat = 16
         static let inputCornerRadius: CGFloat = 8
         static let buttonCornerRadius: CGFloat = 10
         static let cardPadding: CGFloat = 16
         static let spacing: CGFloat = 12
-        
-        // Colors
-        static let anthropicAccent = NSColor(red: 0.85, green: 0.467, blue: 0.341, alpha: 1.0) // Claude coral
-        static let groqAccent = NSColor(red: 0.0, green: 0.75, blue: 0.85, alpha: 1.0) // Electric cyan
-        static let activeGreen = NSColor(red: 0.204, green: 0.780, blue: 0.349, alpha: 1.0)
-        static let warningOrange = NSColor(red: 1.0, green: 0.6, blue: 0.0, alpha: 1.0)
+
+        // Colors — new design system
+        static let anthropicAccent = NSColor.accentPrimary              // Teal
+        static let groqAccent = NSColor.accentSecondary                 // Electric blue
+        static let activeGreen = NSColor.accentSuccess                  // Apple green
+        static let warningOrange = NSColor.accentWarning                // Amber
         static let cardBorder = NSColor.white.withAlphaComponent(0.15)
         static let inputBackground = NSColor.black.withAlphaComponent(0.2)
     }
     
     static func create() -> SettingsWindowController {
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 520, height: 520),
+            contentRect: NSRect(x: 0, y: 0, width: 540, height: 560),
             styleMask: [.titled, .closable, .fullSizeContentView],
             backing: .buffered,
             defer: false
@@ -81,7 +81,7 @@ final class SettingsWindowController: NSWindowController {
         backgroundBlur.material = .hudWindow
         backgroundBlur.state = .active
         backgroundBlur.wantsLayer = true
-        backgroundBlur.layer?.cornerRadius = 12
+        backgroundBlur.layer?.cornerRadius = 16
         contentView.addSubview(backgroundBlur)
         
         // === HEADER ===
@@ -790,8 +790,4 @@ final class SettingsWindowController: NSWindowController {
     }
 }
 
-// MARK: - Notification Extension
-
-extension Notification.Name {
-    static let apiKeysUpdated = Notification.Name("apiKeysUpdated")
-}
+// apiKeysUpdated notification is defined in ApiKeyManager.swift

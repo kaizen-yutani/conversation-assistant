@@ -6,12 +6,10 @@ class WindowFactory {
 
     /// Create the main application window with privacy settings
     static func createMainWindow() -> NSWindow {
-        // Calculate window size (70% width, 85% height)
         let screenFrame = NSScreen.main?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1200, height: 800)
         let windowWidth = screenFrame.width * 0.7
         let windowHeight = screenFrame.height * 0.85
 
-        // Center the window on screen
         let windowX = screenFrame.origin.x + (screenFrame.width - windowWidth) / 2
         let windowY = screenFrame.origin.y + (screenFrame.height - windowHeight) / 2
 
@@ -22,14 +20,13 @@ class WindowFactory {
             defer: false
         )
 
-        // Visible for screen sharing/recording
         window.sharingType = .readOnly
 
         // Glass effect settings
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden
         window.isMovableByWindowBackground = true
-        window.title = "🔒 Interview Master"
+        window.title = "Conversation Assistant"
 
         // Transparent background for glass effect
         window.backgroundColor = .clear
@@ -48,8 +45,8 @@ class WindowFactory {
         visualEffectView.autoresizingMask = [.width, .height]
         visualEffectView.blendingMode = .behindWindow
         visualEffectView.state = .active
-        visualEffectView.material = .menu  // Balanced material - transparent but readable
-        visualEffectView.alphaValue = 0.8  // More opaque for blur effect
+        visualEffectView.material = .hudWindow
+        visualEffectView.alphaValue = 0.85
         return visualEffectView
     }
 }

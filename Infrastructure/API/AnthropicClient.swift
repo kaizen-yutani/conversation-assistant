@@ -101,8 +101,25 @@ class AnthropicClient {
     /// Track if connection has been warmed up
     private var isConnectionWarm = false
 
+    private var currentTask: Task<Void, Error>?
+
     init(apiKey: String) {
         self.apiKey = apiKey
+    }
+
+    deinit {
+        currentTask?.cancel()
+        session.invalidateAndCancel()
+    }
+
+    func cancelCurrentRequest() {
+        currentTask?.cancel()
+        currentTask = nil
+    }
+
+    private func isNetworkError(_ error: Error) -> Bool {
+        let nsError = error as NSError
+        return nsError.domain == NSURLErrorDomain
     }
 
     /// Check if an HTTP status code is retryable
@@ -145,6 +162,8 @@ class AnthropicClient {
     /// Quick non-streaming message for interview answers
     func sendMessage(prompt: String, maxTokens: Int = 300) async throws -> (text: String, latencyMs: Double) {
         let startTime = Date()
+        let maxAttempts = 3
+        let backoffIntervals: [Double] = [0.5, 1.0, 1.5]
 
         let requestBody: [String: Any] = [
             "model": model,
@@ -161,18 +180,43 @@ class AnthropicClient {
         request.addValue("application/json", forHTTPHeaderField: "content-type")
         request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
 
-        let (data, _) = try await session.data(for: request)
-        let latency = Date().timeIntervalSince(startTime) * 1000
+        var lastError: Error?
 
-        struct Response: Codable {
-            struct Content: Codable { let text: String }
-            let content: [Content]
+        for attempt in 0..<maxAttempts {
+            do {
+                let (data, response) = try await session.data(for: request)
+
+                if let httpResponse = response as? HTTPURLResponse,
+                   (400..<500).contains(httpResponse.statusCode) {
+                    throw NSError(domain: "AnthropicClient", code: httpResponse.statusCode,
+                                  userInfo: [NSLocalizedDescriptionKey: "HTTP \(httpResponse.statusCode)"])
+                }
+
+                let latency = Date().timeIntervalSince(startTime) * 1000
+
+                struct Response: Codable {
+                    struct Content: Codable { let text: String }
+                    let content: [Content]
+                }
+
+                let decoded = try JSONDecoder().decode(Response.self, from: data)
+                let text = decoded.content.first?.text.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+
+                return (text, latency)
+            } catch {
+                let nsError = error as NSError
+                if (400..<500).contains(nsError.code) && nsError.domain == "AnthropicClient" {
+                    throw error
+                }
+
+                lastError = error
+                if attempt < maxAttempts - 1 {
+                    try await Task.sleep(nanoseconds: UInt64(backoffIntervals[attempt] * 1_000_000_000))
+                }
+            }
         }
 
-        let response = try JSONDecoder().decode(Response.self, from: data)
-        let text = response.content.first?.text.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-
-        return (text, latency)
+        throw lastError!
     }
 
     /// Stream text-only message (no images) - for interview answers
@@ -206,52 +250,70 @@ class AnthropicClient {
             return .failure(error)
         }
 
-        do {
-            let (bytes, response) = try await session.bytes(for: request)
+        for attempt in 0..<2 {
+            do {
+                let (bytes, response) = try await session.bytes(for: request)
 
-            guard let httpResponse = response as? HTTPURLResponse else {
-                return .failure(NSError(domain: "Invalid response", code: -1))
-            }
-
-            guard (200...299).contains(httpResponse.statusCode) else {
-                var errorMessage = "HTTP \(httpResponse.statusCode)"
-                var errorBody = ""
-                for try await line in bytes.lines {
-                    errorBody += line + "\n"
-                    if errorBody.count > 500 { break }
+                guard let httpResponse = response as? HTTPURLResponse else {
+                    return .failure(NSError(domain: "Invalid response", code: -1))
                 }
 
-                if let data = errorBody.data(using: .utf8),
-                   let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                   let error = json["error"] as? [String: Any],
-                   let message = error["message"] as? String {
-                    errorMessage = message
-                }
+                guard (200...299).contains(httpResponse.statusCode) else {
+                    var errorMessage = "HTTP \(httpResponse.statusCode)"
+                    var errorBody = ""
+                    for try await line in bytes.lines {
+                        errorBody += line + "\n"
+                        if errorBody.count > 500 { break }
+                    }
 
-                return .failure(NSError(domain: errorMessage, code: httpResponse.statusCode))
-            }
-
-            // Parse SSE stream
-            for try await line in bytes.lines {
-                if line.hasPrefix("data: ") {
-                    let jsonString = String(line.dropFirst(6))
-                    if jsonString == "[DONE]" { break }
-
-                    if let data = jsonString.data(using: .utf8),
+                    if let data = errorBody.data(using: .utf8),
                        let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                       let type = json["type"] as? String,
-                       type == "content_block_delta",
-                       let delta = json["delta"] as? [String: Any],
-                       let text = delta["text"] as? String {
-                        onChunk(text)
+                       let error = json["error"] as? [String: Any],
+                       let message = error["message"] as? String {
+                        errorMessage = message
+                    }
+
+                    let error = NSError(domain: errorMessage, code: httpResponse.statusCode)
+
+                    if (400..<500).contains(httpResponse.statusCode) {
+                        return .failure(error)
+                    }
+
+                    if attempt < 1 {
+                        try? await Task.sleep(nanoseconds: 500_000_000)
+                        continue
+                    }
+                    return .failure(error)
+                }
+
+                // Parse SSE stream
+                for try await line in bytes.lines {
+                    if line.hasPrefix("data: ") {
+                        let jsonString = String(line.dropFirst(6))
+                        if jsonString == "[DONE]" { break }
+
+                        if let data = jsonString.data(using: .utf8),
+                           let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                           let type = json["type"] as? String,
+                           type == "content_block_delta",
+                           let delta = json["delta"] as? [String: Any],
+                           let text = delta["text"] as? String {
+                            onChunk(text)
+                        }
                     }
                 }
-            }
 
-            return .success(())
-        } catch {
-            return .failure(error)
+                return .success(())
+            } catch {
+                if isNetworkError(error) && attempt < 1 {
+                    try? await Task.sleep(nanoseconds: 500_000_000)
+                    continue
+                }
+                return .failure(error)
+            }
         }
+
+        return .failure(NSError(domain: "Failed after retries", code: -1))
     }
 
     /// Classification result for an utterance
@@ -269,16 +331,24 @@ Classify the user's utterance, then answer if it's a question or request.
 Output ONE line: STATUS:xxx|TOPIC:yyy
 
 STATUS:
-- question = wants info OR requests action. Includes:
+- question = wants info OR requests action OR expresses curiosity. Includes:
   • Direct questions ("What tickets are left?")
   • Implicit requests ("let's see what's in the sprint", "show me my tickets", "check the backlog")
   • Action phrases ("let's see", "let's check", "what's left", "what do we have")
-- incomplete = genuinely cut off mid-word/mid-phrase, NOT just casual speech
-- answer = responding/explaining, confirmations, thanks
+  • Statements with uncertainty ("I wonder", "I'm not sure about", "I'm curious")
+  • Rhetorical questions ("wouldn't that be", "isn't that", "right?", "correct?")
+  • Requests starting with fillers ("okay so what about", "sure but how does", "thanks, now tell me")
+- incomplete = genuinely cut off mid-word/mid-phrase (e.g., "What is the best w-", "How do you han")
+  Do NOT mark as incomplete just because it ends with a preposition or conjunction - natural speech often does.
+- answer = ONLY use for pure confirmations/acknowledgments with NO information request ("Yes", "No", "Thanks", "Got it", "I see")
+- filler = ONLY for standalone noise words with zero meaning ("um", "hmm", "uh")
 
-IMPORTANT: Err on the side of "question" - if someone could want information, it's a question.
+CRITICAL: When in doubt, ALWAYS classify as "question". It is far better to answer a non-question than to skip a real question.
 "let's see if we have any tickets" → question (wants ticket info)
 "what's left for the sprint" → question (wants sprint status)
+"okay, what about the deployment" → question (starts with filler but asks about deployment)
+"so tell me about the architecture" → question (starts with conjunction but is a request)
+"thank you, now what's next" → question (gratitude + question)
 
 === IF question, ADD ANSWER ===
 After STATUS line, output "---" then answer in 3-4 bullet points. Be direct, no fluff.
@@ -386,88 +456,117 @@ When you need more information, indicate you would use available tools.
             return .failure(error)
         }
 
-        do {
-            let (bytes, response) = try await session.bytes(for: request)
+        for attempt in 0..<2 {
+            do {
+                let (bytes, response) = try await session.bytes(for: request)
 
-            guard let httpResponse = response as? HTTPURLResponse else {
-                return .failure(NSError(domain: "Invalid response", code: -1))
-            }
-
-            guard (200...299).contains(httpResponse.statusCode) else {
-                var errorMessage = "HTTP \(httpResponse.statusCode)"
-                var errorBody = ""
-                for try await line in bytes.lines {
-                    errorBody += line + "\n"
-                    if errorBody.count > 500 { break }
+                guard let httpResponse = response as? HTTPURLResponse else {
+                    return .failure(NSError(domain: "Invalid response", code: -1))
                 }
-                if let data = errorBody.data(using: .utf8),
-                   let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                   let error = json["error"] as? [String: Any],
-                   let message = error["message"] as? String {
-                    errorMessage = message
-                }
-                return .failure(NSError(domain: errorMessage, code: httpResponse.statusCode))
-            }
 
-            var fullText = ""
-            var classificationSent = false
-            var answerStarted = false
-
-            for try await line in bytes.lines {
-                if line.hasPrefix("data: ") {
-                    let jsonString = String(line.dropFirst(6))
-                    if jsonString == "[DONE]" { break }
-
-                    if let data = jsonString.data(using: .utf8),
+                guard (200...299).contains(httpResponse.statusCode) else {
+                    var errorMessage = "HTTP \(httpResponse.statusCode)"
+                    var errorBody = ""
+                    for try await line in bytes.lines {
+                        errorBody += line + "\n"
+                        if errorBody.count > 500 { break }
+                    }
+                    if let data = errorBody.data(using: .utf8),
                        let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                       let type = json["type"] as? String,
-                       type == "content_block_delta",
-                       let delta = json["delta"] as? [String: Any],
-                       let text = delta["text"] as? String {
-                        fullText += text
+                       let error = json["error"] as? [String: Any],
+                       let message = error["message"] as? String {
+                        errorMessage = message
+                    }
 
-                        // Parse classification from first line
-                        if !classificationSent && fullText.contains("\n") {
-                            let lines = fullText.components(separatedBy: "\n")
-                            if let firstLine = lines.first, firstLine.contains("STATUS:") {
-                                let classification = parseClassification(firstLine)
-                                classificationSent = true
-                                onClassification(classification)
+                    let error = NSError(domain: errorMessage, code: httpResponse.statusCode)
 
-                                // If not a question, we're done after classification
-                                if classification.status != "question" {
-                                    return .success(())
+                    if (400..<500).contains(httpResponse.statusCode) {
+                        return .failure(error)
+                    }
+
+                    if attempt < 1 {
+                        try? await Task.sleep(nanoseconds: 500_000_000)
+                        continue
+                    }
+                    return .failure(error)
+                }
+
+                var fullText = ""
+                var classificationSent = false
+                var answerStarted = false
+                var answerContentStarted = false
+
+                for try await line in bytes.lines {
+                    if line.hasPrefix("data: ") {
+                        let jsonString = String(line.dropFirst(6))
+                        if jsonString == "[DONE]" { break }
+
+                        if let data = jsonString.data(using: .utf8),
+                           let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                           let type = json["type"] as? String,
+                           type == "content_block_delta",
+                           let delta = json["delta"] as? [String: Any],
+                           let text = delta["text"] as? String {
+                            fullText += text
+
+                            // Parse classification from first line
+                            if !classificationSent && fullText.contains("\n") {
+                                let lines = fullText.components(separatedBy: "\n")
+                                if let firstLine = lines.first, firstLine.contains("STATUS:") {
+                                    let classification = parseClassification(firstLine)
+                                    classificationSent = true
+                                    onClassification(classification)
+
+                                    // If not a question, we're done after classification
+                                    if classification.status != "question" {
+                                        return .success(())
+                                    }
                                 }
                             }
-                        }
 
-                        // Stream answer after "---"
-                        if classificationSent && !answerStarted && fullText.contains("---") {
-                            answerStarted = true
-                            // Send any content after ---
-                            if let range = fullText.range(of: "---") {
-                                let afterSeparator = String(fullText[range.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
-                                if !afterSeparator.isEmpty {
-                                    onAnswerChunk(afterSeparator)
+                            // Stream answer after "---"
+                            if classificationSent && !answerStarted && fullText.contains("---") {
+                                answerStarted = true
+                                // Send any content after ---
+                                if let range = fullText.range(of: "---") {
+                                    let afterSeparator = String(fullText[range.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
+                                    if !afterSeparator.isEmpty {
+                                        answerContentStarted = true
+                                        onAnswerChunk(afterSeparator)
+                                    }
+                                }
+                            } else if answerStarted {
+                                if !answerContentStarted {
+                                    let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                                    if !trimmed.isEmpty {
+                                        answerContentStarted = true
+                                        onAnswerChunk(trimmed)
+                                    }
+                                } else {
+                                    onAnswerChunk(text)
                                 }
                             }
-                        } else if answerStarted {
-                            onAnswerChunk(text)
                         }
                     }
                 }
-            }
 
-            // Handle case where classification wasn't parsed (fallback)
-            if !classificationSent {
-                let classification = parseClassification(fullText)
-                onClassification(classification)
-            }
+                // Handle case where classification wasn't parsed (fallback)
+                if !classificationSent {
+                    let classification = parseClassification(fullText)
+                    onClassification(classification)
+                }
 
-            return .success(())
-        } catch {
-            return .failure(error)
+                return .success(())
+            } catch {
+                if isNetworkError(error) && attempt < 1 {
+                    try? await Task.sleep(nanoseconds: 500_000_000)
+                    continue
+                }
+                return .failure(error)
+            }
         }
+
+        return .failure(NSError(domain: "Failed after retries", code: -1))
     }
 
     /// Parse STATUS:xxx|TOPIC:yyy format
@@ -577,53 +676,70 @@ When you need more information, indicate you would use available tools.
             return .failure(error)
         }
 
-        do {
-            let (bytes, response) = try await session.bytes(for: request)
+        for attempt in 0..<2 {
+            do {
+                let (bytes, response) = try await session.bytes(for: request)
 
-            guard let httpResponse = response as? HTTPURLResponse else {
-                return .failure(NSError(domain: "Invalid response", code: -1))
-            }
-
-            guard (200...299).contains(httpResponse.statusCode) else {
-                // Try to read error message
-                var errorMessage = "HTTP \(httpResponse.statusCode)"
-                var errorBody = ""
-                for try await line in bytes.lines {
-                    errorBody += line + "\n"
-                    if errorBody.count > 500 { break } // Limit error message size
+                guard let httpResponse = response as? HTTPURLResponse else {
+                    return .failure(NSError(domain: "Invalid response", code: -1))
                 }
 
-                if let data = errorBody.data(using: .utf8),
-                   let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                   let error = json["error"] as? [String: Any],
-                   let message = error["message"] as? String {
-                    errorMessage = message
-                }
+                guard (200...299).contains(httpResponse.statusCode) else {
+                    var errorMessage = "HTTP \(httpResponse.statusCode)"
+                    var errorBody = ""
+                    for try await line in bytes.lines {
+                        errorBody += line + "\n"
+                        if errorBody.count > 500 { break }
+                    }
 
-                return .failure(NSError(domain: errorMessage, code: httpResponse.statusCode))
-            }
-
-            // Parse SSE stream
-            for try await line in bytes.lines {
-                if line.hasPrefix("data: ") {
-                    let jsonString = String(line.dropFirst(6))
-                    if jsonString == "[DONE]" { break }
-
-                    if let data = jsonString.data(using: .utf8),
+                    if let data = errorBody.data(using: .utf8),
                        let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                       let type = json["type"] as? String,
-                       type == "content_block_delta",
-                       let delta = json["delta"] as? [String: Any],
-                       let text = delta["text"] as? String {
-                        onChunk(text)
+                       let error = json["error"] as? [String: Any],
+                       let message = error["message"] as? String {
+                        errorMessage = message
+                    }
+
+                    let error = NSError(domain: errorMessage, code: httpResponse.statusCode)
+
+                    if (400..<500).contains(httpResponse.statusCode) {
+                        return .failure(error)
+                    }
+
+                    if attempt < 1 {
+                        try? await Task.sleep(nanoseconds: 500_000_000)
+                        continue
+                    }
+                    return .failure(error)
+                }
+
+                // Parse SSE stream
+                for try await line in bytes.lines {
+                    if line.hasPrefix("data: ") {
+                        let jsonString = String(line.dropFirst(6))
+                        if jsonString == "[DONE]" { break }
+
+                        if let data = jsonString.data(using: .utf8),
+                           let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                           let type = json["type"] as? String,
+                           type == "content_block_delta",
+                           let delta = json["delta"] as? [String: Any],
+                           let text = delta["text"] as? String {
+                            onChunk(text)
+                        }
                     }
                 }
-            }
 
-            return .success(())
-        } catch {
-            return .failure(error)
+                return .success(())
+            } catch {
+                if isNetworkError(error) && attempt < 1 {
+                    try? await Task.sleep(nanoseconds: 500_000_000)
+                    continue
+                }
+                return .failure(error)
+            }
         }
+
+        return .failure(NSError(domain: "Failed after retries", code: -1))
     }
 
 
@@ -930,5 +1046,73 @@ When you need more information, indicate you would use available tools.
 
         // Should never reach here, but return last error if we do
         return .failure(lastError ?? NSError(domain: "Unknown error after retries", code: -1))
+    }
+
+    // MARK: - Conversation Summarization
+
+    func summarizeConversation(conversationText: String) async throws -> String {
+        guard !conversationText.isEmpty else { return "" }
+
+        let maxAttempts = 3
+        let backoffIntervals: [Double] = [0.5, 1.0, 1.5]
+
+        let prompt = """
+        Summarize this conversation in 2-3 concise sentences.
+        Focus on: main topics discussed, key technical concepts, and any important context for follow-up questions.
+
+        Conversation:
+        \(conversationText)
+
+        Summary:
+        """
+
+        let requestBody: [String: Any] = [
+            "model": model,
+            "max_tokens": 150,
+            "messages": [
+                ["role": "user", "content": prompt]
+            ]
+        ]
+
+        var request = URLRequest(url: URL(string: baseURL)!)
+        request.httpMethod = "POST"
+        request.addValue(apiKey, forHTTPHeaderField: "x-api-key")
+        request.addValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
+        request.addValue("application/json", forHTTPHeaderField: "content-type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
+
+        var lastError: Error?
+
+        for attempt in 0..<maxAttempts {
+            do {
+                let (data, response) = try await session.data(for: request)
+
+                if let httpResponse = response as? HTTPURLResponse,
+                   (400..<500).contains(httpResponse.statusCode) {
+                    throw NSError(domain: "AnthropicClient", code: httpResponse.statusCode,
+                                  userInfo: [NSLocalizedDescriptionKey: "HTTP \(httpResponse.statusCode)"])
+                }
+
+                struct Response: Codable {
+                    struct Content: Codable { let text: String }
+                    let content: [Content]
+                }
+
+                let decoded = try JSONDecoder().decode(Response.self, from: data)
+                return decoded.content.first?.text.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            } catch {
+                let nsError = error as NSError
+                if (400..<500).contains(nsError.code) && nsError.domain == "AnthropicClient" {
+                    throw error
+                }
+
+                lastError = error
+                if attempt < maxAttempts - 1 {
+                    try await Task.sleep(nanoseconds: UInt64(backoffIntervals[attempt] * 1_000_000_000))
+                }
+            }
+        }
+
+        throw lastError!
     }
 }

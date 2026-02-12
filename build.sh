@@ -10,6 +10,7 @@ swiftc -o "${APP_NAME}" \
     Domain/ValueObjects/Tab.swift \
     Domain/ValueObjects/AnalysisMode.swift \
     Domain/Model/AppSettings.swift \
+    Domain/Model/Constants.swift \
     Domain/Model/ConversationContext.swift \
     Domain/Model/ConversationMessage.swift \
     Domain/Model/DataSourceConfig.swift \

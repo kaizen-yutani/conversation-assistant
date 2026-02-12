@@ -171,39 +171,44 @@ class DeepgramStreamingClient: NSObject {
     private func handleTextMessage(_ text: String) {
         guard let data = text.data(using: .utf8) else { return }
 
-        do {
-            let response = try JSONDecoder().decode(DeepgramResponse.self, from: data)
+        // First extract message type (works for all Deepgram event formats)
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let type = json["type"] as? String else {
+            NSLog("⚠️ Deepgram: Could not parse type from: %@", String(text.prefix(200)))
+            return
+        }
 
-            // Handle different message types
-            switch response.type {
-            case "Results":
+        switch type {
+        case "Results":
+            // Full transcript response - decode with structured parser
+            do {
+                let response = try JSONDecoder().decode(DeepgramResponse.self, from: data)
                 handleTranscriptResults(response)
-            case "Metadata":
-                NSLog("📋 Deepgram: Metadata received - request_id: %@", response.requestId ?? "unknown")
-                DispatchQueue.main.async {
-                    self.onConnected?()
-                }
-            case "SpeechStarted":
-                NSLog("🎤 Deepgram: Speech started")
-            case "UtteranceEnd":
-                NSLog("🔚 Deepgram: Utterance end")
-                // Finalize current utterance
-                if !currentUtterance.isEmpty {
-                    let final = currentUtterance.trimmingCharacters(in: .whitespacesAndNewlines)
-                    if !final.isEmpty {
-                        DispatchQueue.main.async {
-                            self.onFinalTranscript?(final)
-                        }
-                    }
-                    currentUtterance = ""
-                }
-            default:
-                NSLog("📨 Deepgram: Unknown message type: %@", response.type ?? "nil")
+            } catch {
+                NSLog("⚠️ Deepgram: Results parse error: %@", error.localizedDescription)
             }
-
-        } catch {
-            // Try to parse as a simple error message
-            NSLog("⚠️ Deepgram: Parse error: %@ - Raw: %@", error.localizedDescription, String(text.prefix(200)))
+        case "Metadata":
+            let requestId = json["request_id"] as? String ?? "unknown"
+            NSLog("📋 Deepgram: Metadata received - request_id: %@", requestId)
+            DispatchQueue.main.async {
+                self.onConnected?()
+            }
+        case "SpeechStarted":
+            NSLog("🎤 Deepgram: Speech started")
+        case "UtteranceEnd":
+            NSLog("🔚 Deepgram: Utterance end (accumulated: %@)", currentUtterance)
+            // Finalize current utterance
+            if !currentUtterance.isEmpty {
+                let final = currentUtterance.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !final.isEmpty {
+                    DispatchQueue.main.async {
+                        self.onFinalTranscript?(final)
+                    }
+                }
+                currentUtterance = ""
+            }
+        default:
+            NSLog("📨 Deepgram: Unknown message type: %@", type)
         }
     }
 
@@ -220,13 +225,17 @@ class DeepgramStreamingClient: NSObject {
         if transcript.isEmpty { return }
 
         if isFinal {
-            // Final result for this segment
-            currentUtterance = transcript
-            NSLog("✅ Deepgram [FINAL]: %@", transcript)
+            // Accumulate final segments into full utterance (Deepgram splits long speech)
+            if currentUtterance.isEmpty {
+                currentUtterance = transcript
+            } else {
+                currentUtterance += " " + transcript
+            }
+            NSLog("✅ Deepgram [FINAL]: %@ (accumulated: %@)", transcript, currentUtterance)
 
             // Only early-finalize on questions (?) - let UtteranceEnd handle statements
             // This prevents "ok." from cutting off "ok. tell me about OOP"
-            let trimmed = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+            let trimmed = currentUtterance.trimmingCharacters(in: .whitespacesAndNewlines)
             if trimmed.hasSuffix("?") {
                 DispatchQueue.main.async {
                     self.onFinalTranscript?(trimmed)
@@ -235,12 +244,12 @@ class DeepgramStreamingClient: NSObject {
             }
             // Statements (. !) wait for UtteranceEnd to allow continuation
         } else {
-            // Interim result
-            currentUtterance = transcript
-            NSLog("📝 Deepgram [interim]: %@", transcript)
+            // Interim result - combine accumulated finals with current partial
+            let displayText = currentUtterance.isEmpty ? transcript : "\(currentUtterance) \(transcript)"
+            NSLog("📝 Deepgram [interim]: %@", displayText)
 
             DispatchQueue.main.async {
-                self.onPartialTranscript?(transcript)
+                self.onPartialTranscript?(displayText)
             }
         }
     }

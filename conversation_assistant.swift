@@ -4,22 +4,49 @@ import ScreenCaptureKit
 import AVFoundation
 import UniformTypeIdentifiers
 
-// MARK: - Apple HIG Colors
+// MARK: - Design System Colors (Apple Futuristic)
 extension NSColor {
-    /// Apple HIG Green (52, 199, 89)
-    static let appleGreen = NSColor(red: 0.204, green: 0.780, blue: 0.349, alpha: 1.0)
-    /// Apple HIG Red (255, 59, 48)
-    static let appleRed = NSColor(red: 1.0, green: 0.231, blue: 0.188, alpha: 1.0)
-    /// Apple HIG Purple (175, 82, 222)
-    static let applePurple = NSColor(red: 0.686, green: 0.322, blue: 0.871, alpha: 1.0)
-    /// Apple Gold (255, 214, 0) - matches our active tab color
-    static let appleGold = NSColor(red: 1.0, green: 0.84, blue: 0.0, alpha: 1.0)
+    // Primary accent — cool teal (Vision Pro / Logic Pro inspired)
+    static let accentPrimary = NSColor(red: 0.20, green: 0.78, blue: 0.85, alpha: 1.0)      // #33C7D9
+    static let accentSecondary = NSColor(red: 0.25, green: 0.55, blue: 1.0, alpha: 1.0)     // #408CFF
 
-    /// Claude brand colors - warm coral/terracotta gradient
-    static let claudeCoral = NSColor(red: 0.85, green: 0.467, blue: 0.341, alpha: 1.0)      // #D97757
-    static let claudeOrange = NSColor(red: 0.914, green: 0.545, blue: 0.396, alpha: 1.0)    // #E98B65
-    static let claudePeach = NSColor(red: 0.957, green: 0.643, blue: 0.525, alpha: 1.0)     // #F4A486
-    static let claudeSand = NSColor(red: 0.878, green: 0.698, blue: 0.565, alpha: 1.0)      // #E0B290
+    // Semantic colors
+    static let accentSuccess = NSColor(red: 0.204, green: 0.780, blue: 0.349, alpha: 1.0)   // #34C759
+    static let accentWarning = NSColor(red: 1.0, green: 0.70, blue: 0.0, alpha: 1.0)        // #FFB300
+    static let accentError = NSColor(red: 1.0, green: 0.231, blue: 0.188, alpha: 1.0)       // #FF3B30
+
+    // Message type colors
+    static let messageQuestion = NSColor(red: 1.0, green: 0.80, blue: 0.0, alpha: 1.0)      // #FFCC00
+    static let messageAnswer = NSColor(red: 0.20, green: 0.78, blue: 0.85, alpha: 1.0)      // #33C7D9
+    static let messageScreenshot = NSColor(red: 0.62, green: 0.35, blue: 0.98, alpha: 1.0)  // #9E59FA
+    static let messageTool = NSColor(red: 0.25, green: 0.55, blue: 1.0, alpha: 1.0)         // #408CFF
+
+    // Surface layers
+    static let surfaceBase = NSColor(red: 0.08, green: 0.08, blue: 0.10, alpha: 1.0)        // #14141A
+    static let surfacePrimary = NSColor(red: 0.12, green: 0.13, blue: 0.15, alpha: 0.85)    // #1F2126
+    static let surfaceSecondary = NSColor(red: 0.16, green: 0.17, blue: 0.20, alpha: 0.90)  // #292B33
+    static let surfaceTertiary = NSColor(red: 0.20, green: 0.21, blue: 0.24, alpha: 0.95)   // #33363D
+
+    // Text hierarchy
+    static let textHero = NSColor(white: 1.0, alpha: 1.0)
+    static let textPrimary = NSColor(white: 0.95, alpha: 1.0)
+    static let textSecondary = NSColor(white: 0.70, alpha: 1.0)
+    static let textTertiary = NSColor(white: 0.45, alpha: 1.0)
+
+    // Code colors
+    static let codeInline = NSColor(red: 1.0, green: 0.75, blue: 0.60, alpha: 1.0)          // #FFBF99
+    static let codeBackground = NSColor(red: 0.10, green: 0.11, blue: 0.13, alpha: 1.0)     // #1A1C21
+    static let codeBorder = NSColor(white: 0.20, alpha: 0.4)
+
+    // Legacy aliases for compatibility
+    static let appleGreen = accentSuccess
+    static let appleRed = accentError
+    static let applePurple = messageScreenshot
+    static let appleGold = messageQuestion
+    static let claudeCoral = accentPrimary
+    static let claudeOrange = accentPrimary
+    static let claudePeach = NSColor(red: 0.30, green: 0.90, blue: 1.0, alpha: 1.0)         // #4DE6FF
+    static let claudeSand = NSColor(red: 0.20, green: 0.78, blue: 0.85, alpha: 0.6)
 }
 
 // MARK: - NSBezierPath CGPath Extension
@@ -212,14 +239,15 @@ class HoverButton: NSButton {
             context.timingFunction = CAMediaTimingFunction(name: .easeOut)
             self.animator().layer?.backgroundColor = hoverBackgroundColor.cgColor
             self.animator().layer?.borderColor = hoverBorderColor.cgColor
-            self.animator().layer?.transform = CATransform3DMakeScale(1.02, 1.02, 1.0)
+            self.animator().layer?.transform = CATransform3DMakeScale(1.05, 1.05, 1.0)
         }
     }
 
     private func animateToNormalState() {
+        // Spring-like return with overshoot
         NSAnimationContext.runAnimationGroup { context in
-            context.duration = 0.2
-            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            context.duration = 0.25
+            context.timingFunction = CAMediaTimingFunction(controlPoints: 0.5, 1.2, 0.8, 1.0)
             self.animator().layer?.backgroundColor = normalBackgroundColor.cgColor
             self.animator().layer?.borderColor = normalBorderColor.cgColor
             self.animator().layer?.transform = CATransform3DIdentity
@@ -228,10 +256,10 @@ class HoverButton: NSButton {
 
     private func animateToPressState() {
         NSAnimationContext.runAnimationGroup { context in
-            context.duration = 0.08
+            context.duration = 0.06
             context.timingFunction = CAMediaTimingFunction(name: .easeIn)
             self.animator().layer?.backgroundColor = pressBackgroundColor.cgColor
-            self.animator().layer?.transform = CATransform3DMakeScale(0.97, 0.97, 1.0)
+            self.animator().layer?.transform = CATransform3DMakeScale(0.95, 0.95, 1.0)
         }
     }
 
@@ -264,11 +292,11 @@ class ConnectionButton: NSButton {
     private let iconView = NSImageView()
     private let statusDot = NSView()
     private let labelView = NSTextField(labelWithString: "")
-    private let gradientLayer = CAGradientLayer()
+    private let backgroundLayer = CALayer()
 
     // Colors
-    private let connectedColor = NSColor(red: 0.2, green: 0.84, blue: 0.45, alpha: 1.0) // Green
-    private let disconnectedColor = NSColor.white.withAlphaComponent(0.35) // Grey
+    private let connectedColor = NSColor.accentSuccess
+    private let disconnectedColor = NSColor.white.withAlphaComponent(0.30)
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -286,7 +314,7 @@ class ConnectionButton: NSButton {
         isBordered = false
         wantsLayer = true
 
-        // Glass morphism effect
+        // Glass morphism effect — no gradients
         layer?.cornerRadius = 12
         layer?.borderWidth = 1.0
         layer?.masksToBounds = false
@@ -297,12 +325,10 @@ class ConnectionButton: NSButton {
         layer?.shadowOffset = CGSize(width: 0, height: 1)
         layer?.shadowRadius = 3
 
-        // Gradient background layer
-        gradientLayer.cornerRadius = 12
-        gradientLayer.masksToBounds = true
-        gradientLayer.startPoint = CGPoint(x: 0, y: 0)
-        gradientLayer.endPoint = CGPoint(x: 1, y: 1)
-        layer?.insertSublayer(gradientLayer, at: 0)
+        // Solid background layer (replaces gradient)
+        backgroundLayer.cornerRadius = 12
+        backgroundLayer.masksToBounds = true
+        layer?.insertSublayer(backgroundLayer, at: 0)
 
         // Icon
         iconView.frame = NSRect(x: 10, y: 6, width: 14, height: 14)
@@ -327,7 +353,7 @@ class ConnectionButton: NSButton {
 
     override func layout() {
         super.layout()
-        gradientLayer.frame = bounds
+        backgroundLayer.frame = bounds
     }
 
     func configure(icon: String, label: String, accent: NSColor) {
@@ -346,47 +372,35 @@ class ConnectionButton: NSButton {
     }
 
     private func updateVisualState() {
-        gradientLayer.frame = bounds
+        backgroundLayer.frame = bounds
 
         if isConnected {
-            // Connected state - green
             let baseColor = connectedColor
-
-            if isHovered {
-                gradientLayer.colors = [
-                    baseColor.withAlphaComponent(0.3).cgColor,
-                    baseColor.withAlphaComponent(0.15).cgColor
-                ]
-            } else {
-                gradientLayer.colors = [
-                    baseColor.withAlphaComponent(0.15).cgColor,
-                    baseColor.withAlphaComponent(0.08).cgColor
-                ]
-            }
-
-            layer?.borderColor = baseColor.withAlphaComponent(isHovered ? 0.5 : 0.3).cgColor
+            backgroundLayer.backgroundColor = baseColor.withAlphaComponent(isHovered ? 0.20 : 0.10).cgColor
+            layer?.borderColor = baseColor.withAlphaComponent(isHovered ? 0.45 : 0.25).cgColor
             statusDot.layer?.backgroundColor = baseColor.cgColor
+
+            // Subtle glow on connected dot
+            statusDot.layer?.shadowColor = baseColor.cgColor
+            statusDot.layer?.shadowRadius = 4
+            statusDot.layer?.shadowOffset = .zero
+            statusDot.layer?.shadowOpacity = 0.5
+
             iconView.contentTintColor = baseColor.blended(withFraction: 0.3, of: .white)
-            labelView.textColor = .white
+            labelView.textColor = .textPrimary
         } else {
-            // Disconnected state - red dot
             if isHovered {
-                gradientLayer.colors = [
-                    accentColor.withAlphaComponent(0.2).cgColor,
-                    accentColor.withAlphaComponent(0.1).cgColor
-                ]
-                layer?.borderColor = accentColor.withAlphaComponent(0.4).cgColor
+                backgroundLayer.backgroundColor = accentColor.withAlphaComponent(0.12).cgColor
+                layer?.borderColor = accentColor.withAlphaComponent(0.30).cgColor
                 iconView.contentTintColor = accentColor.blended(withFraction: 0.5, of: .white)
             } else {
-                gradientLayer.colors = [
-                    NSColor.white.withAlphaComponent(0.08).cgColor,
-                    NSColor.white.withAlphaComponent(0.04).cgColor
-                ]
+                backgroundLayer.backgroundColor = NSColor.white.withAlphaComponent(0.06).cgColor
                 layer?.borderColor = NSColor.white.withAlphaComponent(0.12).cgColor
                 iconView.contentTintColor = .white.withAlphaComponent(0.7)
             }
 
             statusDot.layer?.backgroundColor = disconnectedColor.cgColor
+            statusDot.layer?.shadowOpacity = 0
             labelView.textColor = .white.withAlphaComponent(isHovered ? 1.0 : 0.8)
         }
     }
@@ -488,7 +502,7 @@ class ConversationAssistantDelegate: NSObject, NSApplicationDelegate, NSTextView
     // Bottom status bar
     var statusBar: NSView!
     var anthropicStatusDot: NSView!
-    var groqStatusDot: NSView!
+    var speechStatusDot: NSView!
     var confluenceStatusDot: NSView!
     var jiraStatusDot: NSView!
     var githubStatusDot: NSView!
@@ -730,15 +744,15 @@ class ConversationAssistantDelegate: NSObject, NSApplicationDelegate, NSTextView
     private func handleApiKeysUpdated() {
         // Show confirmation that keys were updated
         let hasAnthropic = ApiKeyManager.shared.hasKey(.anthropic)
-        let hasGroq = ApiKeyManager.shared.hasKey(.groq)
-        
+        let hasDeepgram = ApiKeyManager.shared.hasKey(.deepgram)
+
         var message = "API keys updated:\n"
         message += "• Anthropic: \(hasAnthropic ? "✓ Configured" : "Not set")\n"
-        message += "• Groq: \(hasGroq ? "✓ Configured" : "Not set")"
-        
+        message += "• Deepgram: \(hasDeepgram ? "✓ Configured" : "Not set")"
+
         // Update status label if visible
         if !voiceContentView.isHidden {
-            voiceStatusLabel.stringValue = hasGroq ? "✓ Groq API ready" : "⚠️ Groq API key needed"
+            voiceStatusLabel.stringValue = hasDeepgram ? "✓ Speech ready" : "⚠️ Deepgram API key needed"
         }
     }
 
@@ -1462,7 +1476,7 @@ The function uses a **hash map** for `O(n)` time complexity.
 
         voiceBarLabel = NSTextField(labelWithString: "Start")
         voiceBarLabel.frame = NSRect(x: collapsedIconX + collapsedIconSize + 8, y: (vbHeight - 18) / 2, width: 60, height: 18)
-        voiceBarLabel.font = .systemFont(ofSize: 14, weight: .semibold)
+        voiceBarLabel.font = .systemFont(ofSize: 14, weight: .bold)
         voiceBarLabel.textColor = NSColor.white.withAlphaComponent(0.95)
         voiceBarLabel.identifier = NSUserInterfaceItemIdentifier("nestStartLabel")
         voiceBarContainer.addSubview(voiceBarLabel)
@@ -1580,6 +1594,9 @@ The function uses a **hash map** for `O(n)` time complexity.
         askButtonInner = voiceBarMicButton.layer!
         askIconView = voiceBarMicIcon
         askButton = voiceBarMicClickArea
+
+        // Start idle breathing animation on the pill border
+        startIdleBreathingAnimation()
 
         // Export button - pill style matching Start button
         let exportWidth: CGFloat = 95
@@ -1870,24 +1887,24 @@ The function uses a **hash map** for `O(n)` time complexity.
         sep1.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.15).cgColor
         statusBar.addSubview(sep1)
         
-        // Groq status indicator
-        let groqIcon = NSImageView(frame: NSRect(x: 100, y: 6, width: 14, height: 14))
-        groqIcon.image = NSImage(systemSymbolName: "bolt.fill", accessibilityDescription: "Groq")
-        groqIcon.contentTintColor = NSColor.white.withAlphaComponent(0.7)
-        groqIcon.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 10, weight: .medium)
-        statusBar.addSubview(groqIcon)
-        
-        groqStatusDot = NSView(frame: NSRect(x: 116, y: 10, width: 6, height: 6))
-        groqStatusDot.wantsLayer = true
-        groqStatusDot.layer?.cornerRadius = 3
-        groqStatusDot.layer?.backgroundColor = NSColor(red: 1.0, green: 0.6, blue: 0.0, alpha: 1.0).cgColor
-        statusBar.addSubview(groqStatusDot)
-        
-        let groqLabel = NSTextField(labelWithString: "Groq")
-        groqLabel.frame = NSRect(x: 126, y: 6, width: 35, height: 14)
-        groqLabel.font = .systemFont(ofSize: 10, weight: .medium)
-        groqLabel.textColor = NSColor.white.withAlphaComponent(0.6)
-        statusBar.addSubview(groqLabel)
+        // Speech status indicator (Deepgram)
+        let speechIcon = NSImageView(frame: NSRect(x: 100, y: 6, width: 14, height: 14))
+        speechIcon.image = NSImage(systemSymbolName: "waveform", accessibilityDescription: "Speech")
+        speechIcon.contentTintColor = NSColor.white.withAlphaComponent(0.7)
+        speechIcon.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 10, weight: .medium)
+        statusBar.addSubview(speechIcon)
+
+        speechStatusDot = NSView(frame: NSRect(x: 116, y: 10, width: 6, height: 6))
+        speechStatusDot.wantsLayer = true
+        speechStatusDot.layer?.cornerRadius = 3
+        speechStatusDot.layer?.backgroundColor = NSColor(red: 1.0, green: 0.6, blue: 0.0, alpha: 1.0).cgColor
+        statusBar.addSubview(speechStatusDot)
+
+        let speechLabel = NSTextField(labelWithString: "Speech")
+        speechLabel.frame = NSRect(x: 126, y: 6, width: 45, height: 14)
+        speechLabel.font = .systemFont(ofSize: 10, weight: .medium)
+        speechLabel.textColor = NSColor.white.withAlphaComponent(0.6)
+        statusBar.addSubview(speechLabel)
 
         // Tools container (will be populated dynamically for other tools)
         toolsContainer = NSStackView(frame: NSRect(x: 175, y: 4, width: 40, height: 20))
@@ -2225,7 +2242,7 @@ The function uses a **hash map** for `O(n)` time complexity.
     /// Update the bottom status bar API indicators
     func updateStatusBarIndicators() {
         let hasAnthropic = ApiKeyManager.shared.hasKey(.anthropic)
-        let hasGroq = ApiKeyManager.shared.hasKey(.groq)
+        let hasDeepgram = ApiKeyManager.shared.hasKey(.deepgram)
         let hasConfluence = ConfluenceClient.shared.isConfigured
         let hasJira = JiraClient.shared.isConfigured
         let hasGitHub = GitHubClient.shared.isConfigured
@@ -2233,11 +2250,11 @@ The function uses a **hash map** for `O(n)` time complexity.
         let greenColor = NSColor(red: 0.204, green: 0.780, blue: 0.349, alpha: 1.0).cgColor
         let orangeColor = NSColor(red: 1.0, green: 0.6, blue: 0.0, alpha: 1.0).cgColor
 
-        // Update API status dots (Anthropic, Groq)
+        // Update API status dots (Anthropic, Speech/Deepgram)
         NSAnimationContext.runAnimationGroup({ context in
             context.duration = 0.3
             anthropicStatusDot.layer?.backgroundColor = hasAnthropic ? greenColor : orangeColor
-            groqStatusDot.layer?.backgroundColor = hasGroq ? greenColor : orangeColor
+            speechStatusDot.layer?.backgroundColor = hasDeepgram ? greenColor : orangeColor
         })
 
         // Update connection buttons (Confluence, Jira, GitHub)
@@ -4809,6 +4826,52 @@ The function uses a **hash map** for `O(n)` time complexity.
         }
     }
 
+    // MARK: - Start Button Idle Breathing Animation
+
+    func startIdleBreathingAnimation() {
+        stopIdleBreathingAnimation()
+
+        // Breathing glow on the voice bar border when idle
+        let glowAnimation = CABasicAnimation(keyPath: "borderColor")
+        glowAnimation.fromValue = NSColor.white.withAlphaComponent(0.25).cgColor
+        glowAnimation.toValue = NSColor.accentPrimary.withAlphaComponent(0.6).cgColor
+        glowAnimation.duration = 2.0
+        glowAnimation.autoreverses = true
+        glowAnimation.repeatCount = .infinity
+        glowAnimation.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        voiceBarInner.add(glowAnimation, forKey: "idleBorderBreathing")
+
+        // Subtle shadow glow breathing
+        let shadowAnimation = CABasicAnimation(keyPath: "shadowOpacity")
+        shadowAnimation.fromValue = 0.0
+        shadowAnimation.toValue = 0.3
+        shadowAnimation.duration = 2.0
+        shadowAnimation.autoreverses = true
+        shadowAnimation.repeatCount = .infinity
+        shadowAnimation.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        voiceBarInner.shadowColor = NSColor.accentPrimary.cgColor
+        voiceBarInner.shadowRadius = 12
+        voiceBarInner.shadowOffset = .zero
+        voiceBarInner.add(shadowAnimation, forKey: "idleShadowBreathing")
+
+        // Icon subtle pulse
+        let iconPulse = CABasicAnimation(keyPath: "transform.scale")
+        iconPulse.fromValue = 1.0
+        iconPulse.toValue = 1.08
+        iconPulse.duration = 2.0
+        iconPulse.autoreverses = true
+        iconPulse.repeatCount = .infinity
+        iconPulse.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        nestIconView.layer?.add(iconPulse, forKey: "idleIconPulse")
+    }
+
+    func stopIdleBreathingAnimation() {
+        voiceBarInner.removeAnimation(forKey: "idleBorderBreathing")
+        voiceBarInner.removeAnimation(forKey: "idleShadowBreathing")
+        voiceBarInner.shadowOpacity = 0
+        nestIconView.layer?.removeAnimation(forKey: "idleIconPulse")
+    }
+
     /// Animate waveform bars based on speaking state and dB level
     /// Supports both old 5-bar layout and new 25-bar voice bar design
     func animateWaveform(bars: [NSView], color: NSColor, isSpeaking: Bool, db: Float) {
@@ -4917,8 +4980,10 @@ The function uses a **hash map** for `O(n)` time complexity.
 
         if recording {
             // === EXPAND VOICE BAR ===
+            stopIdleBreathingAnimation()
+
             NSAnimationContext.runAnimationGroup { context in
-                context.duration = 0.35
+                context.duration = 0.4
                 context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
                 context.allowsImplicitAnimation = true
 
@@ -4929,9 +4994,13 @@ The function uses a **hash map** for `O(n)` time complexity.
 
                 // Expand background layer
                 CATransaction.begin()
-                CATransaction.setAnimationDuration(0.35)
+                CATransaction.setAnimationDuration(0.4)
                 voiceBarInner.frame = CGRect(x: 0, y: 0, width: voiceBarExpandedWidth, height: voiceBarContainer.frame.height)
-                voiceBarInner.borderColor = NSColor.white.withAlphaComponent(0.35).cgColor
+                voiceBarInner.borderColor = NSColor.accentSuccess.withAlphaComponent(0.40).cgColor
+                voiceBarInner.shadowColor = NSColor.accentSuccess.cgColor
+                voiceBarInner.shadowRadius = 10
+                voiceBarInner.shadowOffset = .zero
+                voiceBarInner.shadowOpacity = 0.2
                 CATransaction.commit()
 
                 // Expand click area
@@ -4959,6 +5028,27 @@ The function uses a **hash map** for `O(n)` time complexity.
                     }
                 }
             }
+
+            // Spring bounce effect
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
+                guard let self = self, self.isVoiceBarExpanded else { return }
+                NSAnimationContext.runAnimationGroup { context in
+                    context.duration = 0.15
+                    context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                    // Slight overshoot then settle
+                    var frame = self.voiceBarContainer.frame
+                    frame.size.width = self.voiceBarExpandedWidth + 4
+                    self.voiceBarContainer.animator().frame = frame
+                } completionHandler: {
+                    NSAnimationContext.runAnimationGroup { context in
+                        context.duration = 0.12
+                        context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                        var frame = self.voiceBarContainer.frame
+                        frame.size.width = self.voiceBarExpandedWidth
+                        self.voiceBarContainer.animator().frame = frame
+                    }
+                }
+            }
         } else {
             // === COLLAPSE VOICE BAR ===
             NSAnimationContext.runAnimationGroup { context in
@@ -4976,6 +5066,7 @@ The function uses a **hash map** for `O(n)` time complexity.
                 CATransaction.setAnimationDuration(0.3)
                 voiceBarInner.frame = CGRect(x: 0, y: 0, width: voiceBarCollapsedWidth, height: voiceBarContainer.frame.height)
                 voiceBarInner.borderColor = NSColor.white.withAlphaComponent(0.25).cgColor
+                voiceBarInner.shadowOpacity = 0
                 CATransaction.commit()
 
                 // Collapse click area
@@ -5003,6 +5094,12 @@ The function uses a **hash map** for `O(n)` time complexity.
                 for bar in voiceBarWaveformBars {
                     bar.animator().alphaValue = 0
                 }
+            }
+
+            // Restart idle breathing after collapse
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
+                guard let self = self, !self.isVoiceBarExpanded else { return }
+                self.startIdleBreathingAnimation()
             }
         }
     }
@@ -5183,31 +5280,10 @@ The function uses a **hash map** for `O(n)` time complexity.
 
                 // SYSTEM AUDIO = INTERVIEWER → Classify and potentially generate answer
 
-                // LOCAL PRE-FILTER: Skip API call for obvious fillers/greetings (saves ~800ms)
+                // Skip very short utterances (< 4 chars and no question mark)
                 let normalizedText = trimmed.lowercased()
                     .trimmingCharacters(in: .whitespacesAndNewlines)
-                    .replacingOccurrences(of: "[.!?,']", with: "", options: .regularExpression)
-
-                // Check for greeting patterns (start of utterance)
-                let greetingStarts = ["hello", "hi ", "hey ", "good morning", "good afternoon", "good evening", "welcome to"]
-                let isGreeting = greetingStarts.contains { normalizedText.hasPrefix($0) }
-
-                // Check for filler/acknowledgment patterns
-                let fillerPatterns = ["thank you", "thanks", "yes sure", "yeah sure", "okay", "sure", "sounds good", "got it", "i see", "i understand", "alright"]
-                let isFiller = fillerPatterns.contains { normalizedText.hasPrefix($0) || normalizedText == $0 }
-
-                // Check for question indicators - if present, NEVER skip (it's a real question)
-                let questionWords = ["what", "how", "why", "when", "where", "which", "who", "can you", "could you", "would you", "tell me", "explain", "describe", "give me", "show me", "walk me"]
-                let hasQuestionWord = questionWords.contains { normalizedText.contains($0) }
-
-                // Skip greetings/fillers
-                if (isGreeting || isFiller) && normalizedText.count < 50 && !hasQuestionWord {
-                    await MainActor.run { hideLoading() }
-                    return
-                }
-
-                // Skip very short utterances
-                if normalizedText.count < 4 {
+                if normalizedText.count < 4 && !normalizedText.contains("?") {
                     await MainActor.run { hideLoading() }
                     return
                 }
@@ -5217,20 +5293,7 @@ The function uses a **hash map** for `O(n)` time complexity.
                     return
                 }
 
-                // Buffer incomplete sentences locally
-                let textForIncompleteCheck = trimmed.lowercased().trimmingCharacters(in: .whitespaces)
-                let incompleteEndings = [" so", " and", " but", " the", " a", " an", " to", " of", " that", " if", " when", " is", " are", " have", " can", " will", " for", " with", " on", " in", ","]
-                let endsIncomplete = incompleteEndings.contains { textForIncompleteCheck.hasSuffix($0) }
-                let hasQuestionMark = textForIncompleteCheck.contains("?")
-
-                if endsIncomplete && !hasQuestionMark {
-                    await MainActor.run {
-                        utteranceBuffer = utteranceBuffer.isEmpty ? trimmed : "\(utteranceBuffer) \(trimmed)"
-                        bufferTimestamp = Date()
-                        hideLoading()
-                    }
-                    return
-                }
+                // Local buffering removed - LLM classification handles incomplete detection
 
                 await MainActor.run { showLoading("🔍 Analyzing...", color: .applePurple) }
 
@@ -5262,7 +5325,7 @@ The function uses a **hash map** for `O(n)` time complexity.
                     pinnedSolution: pinnedSolution,
                     onClassification: { [self] classification in
                         // Log classification result
-                        print("→ \(classification.status) | topic: \(classification.topic ?? "unknown")")
+                        NSLog("→ %@ | topic: %@", classification.status, classification.topic ?? "unknown")
 
                         // Handle filler words
                         if classification.status == "filler" { return }
@@ -5294,20 +5357,12 @@ The function uses a **hash map** for `O(n)` time complexity.
                             return
                         }
 
-                        // Check cooldown
+                        // Check cooldown - only skip if within cooldown AND no clear question markers
                         if let lastAnswer = lastAnswerTime {
                             let elapsed = Date().timeIntervalSince(lastAnswer)
                             if elapsed < answerCooldown {
                                 let isClearQuestion = checkForQuestionMarkers(fullText)
                                 if !isClearQuestion {
-                                    conversationContext.addUtterance(text: fullText, topic: detectedTopic)
-                                    return
-                                }
-                                let wordCount = fullText.split(separator: " ").count
-                                let startsWithContinuation = ["so ", "and ", "then ", "but ", "or "].contains {
-                                    fullText.lowercased().hasPrefix($0)
-                                }
-                                if elapsed < 3.0 && wordCount <= 6 && startsWithContinuation {
                                     conversationContext.addUtterance(text: fullText, topic: detectedTopic)
                                     return
                                 }
@@ -5320,18 +5375,12 @@ The function uses a **hash map** for `O(n)` time complexity.
                             messageType = .followUp
                             detectedTopic = conversationContext.lastTopic!
                         } else if topicLower == "followup" && conversationContext.lastTopic == nil {
-                            // Orphan follow-up - check if background question
-                            let backgroundKeywords = ["experience", "background", "yourself", "projects", "position", "role", "job", "work", "company", "team", "career"]
-                            let isLikelyBackground = backgroundKeywords.contains { fullText.lowercased().contains($0) }
-                            if !isLikelyBackground { return }
-                            detectedTopic = "experience"
+                            // Orphan follow-up with no prior context - treat as new question
+                            detectedTopic = "unknown"
                         } else if topicLower == "unknown", let lastTopic = conversationContext.lastTopic {
-                            if checkForQuestionMarkers(fullText) {
-                                messageType = .followUp
-                                detectedTopic = lastTopic
-                            } else {
-                                return
-                            }
+                            // Unknown topic but we have prior context - treat as follow-up
+                            messageType = .followUp
+                            detectedTopic = lastTopic
                         }
 
                         // Check if this question needs tools (Jira, Confluence, etc.)
@@ -5418,11 +5467,12 @@ The function uses a **hash map** for `O(n)` time complexity.
         // Final transcript - process like regular system audio
         // Skip duplicates
         if isDuplicateTranscription(trimmed, source: .systemAudio) {
+            NSLog("⏭️ [streaming] DUPLICATE skipped: %@", trimmed)
             return
         }
 
         // Log transcription and record time for latency tracking
-        print("🔊 [streaming] \(trimmed)")
+        NSLog("🔊 [streaming] %@", trimmed)
         questionEndTime = Date()
 
         // Filter Whisper/Deepgram hallucinations
@@ -5446,18 +5496,7 @@ The function uses a **hash map** for `O(n)` time complexity.
             return
         }
 
-        // Skip greetings/fillers
-        let normalizedText = lowerTrimmed
-        let greetingStarts = ["hello", "hi ", "hey ", "good morning", "good afternoon"]
-        let fillerPatterns = ["thank you", "thanks", "yes sure", "yeah sure", "okay", "sure"]
-        let isGreeting = greetingStarts.contains { normalizedText.hasPrefix($0) }
-        let isFiller = fillerPatterns.contains { normalizedText.hasPrefix($0) || normalizedText == $0 }
-        let questionWords = ["what", "how", "why", "when", "where", "which", "who", "can you", "could you", "tell me", "explain", "describe"]
-        let hasQuestionWord = questionWords.contains { normalizedText.contains($0) }
-
-        if (isGreeting || isFiller) && normalizedText.count < 50 && !hasQuestionWord {
-            return
-        }
+        // Pre-filter removed - LLM classification handles greeting/filler detection
 
         // Process with classification/answering (same as regular flow)
         Task {
@@ -5487,7 +5526,7 @@ The function uses a **hash map** for `O(n)` time complexity.
                 topicsSummary: topicsSummary,
                 pinnedSolution: pinnedSolution,
                 onClassification: { [self] classification in
-                    print("→ \(classification.status) | topic: \(classification.topic ?? "unknown")")
+                    NSLog("→ [streaming] %@ | topic: %@", classification.status, classification.topic ?? "unknown")
 
                     if classification.status == "filler" { return }
 
@@ -6281,22 +6320,25 @@ The function uses a **hash map** for `O(n)` time complexity.
 
     /// Show a tool use indicator in the timeline
     func showToolStatus(_ toolName: String) {
-        let icons: [String: String] = [
-            "search_documentation": "📚",
-            "search_codebase": "💻",
-            "query_database": "🗄️",
-            "web_search": "🌐"
-        ]
         let displayNames: [String: String] = [
             "search_documentation": "documentation",
             "search_codebase": "codebase",
             "query_database": "database",
-            "web_search": "web"
+            "web_search": "web",
+            "get_confluence_page": "confluence",
+            "list_confluence_spaces": "confluence",
+            "search_jira": "jira",
+            "list_jira_projects": "jira",
+            "get_sprint_info": "jira sprint",
+            "list_jira_boards": "jira boards",
+            "list_repositories": "github",
+            "get_pr_details": "pull request",
+            "get_issue_details": "github issue",
+            "list_branches": "branches"
         ]
-        let icon = icons[toolName] ?? "🔧"
         let displayName = displayNames[toolName] ?? toolName.replacingOccurrences(of: "_", with: " ")
-        let message = "\(icon) Searching \(displayName)..."
-        addVoiceMessage(type: .toolUse, content: message, topic: nil)
+        let message = "Searching \(displayName)..."
+        addVoiceMessage(type: .toolUse, content: message, topic: toolName)
     }
 
     /// Show a source citation in the timeline
@@ -6798,10 +6840,24 @@ The function uses a **hash map** for `O(n)` time complexity.
             symbolName = "camera.fill"
             bgAlpha = 0.05
         } else if isToolUse {
-            // Tool use indicator - uses tool-specific icon from content prefix
-            accentColor = NSColor.systemBlue
-            // Extract tool icon from content (e.g., "📚 Searching..." -> use magnifyingglass)
-            symbolName = "magnifyingglass"
+            // Tool use indicator - resolve icon and color from tool name in topic
+            let toolName = message.topic ?? ""
+            let confluenceTools = ["get_confluence_page", "list_confluence_spaces", "search_documentation"]
+            let jiraTools = ["search_jira", "list_jira_projects", "get_sprint_info", "list_jira_boards"]
+            let githubTools = ["list_repositories", "get_pr_details", "get_issue_details", "list_branches"]
+            if confluenceTools.contains(toolName) {
+                symbolName = "doc.text"
+                accentColor = NSColor.systemBlue
+            } else if jiraTools.contains(toolName) {
+                symbolName = "list.bullet"
+                accentColor = NSColor.systemBlue
+            } else if githubTools.contains(toolName) {
+                symbolName = "chevron.left.forwardslash.chevron.right"
+                accentColor = NSColor.systemPurple
+            } else {
+                symbolName = "magnifyingglass"
+                accentColor = NSColor.systemTeal
+            }
             bgAlpha = 0.04
         } else if isSource {
             // Source/citation - subtle link style
@@ -6855,9 +6911,9 @@ The function uses a **hash map** for `O(n)` time complexity.
             container.addSubview(headerLabel)
         }
 
-        // Topic badge if present - modern pill style
+        // Topic badge if present - modern pill style (skip for toolUse, topic holds tool name internally)
         let topicX: CGFloat = (isStatus || isScreenshot || isToolUse || isSource) ? 110 : 32
-        if let topic = message.topic, topic != "followUp" && topic != "answer" && topic != "unknown" {
+        if let topic = message.topic, !isToolUse, topic != "followUp" && topic != "answer" && topic != "unknown" {
             let topicPill = NSView(frame: NSRect(x: topicX, y: viewHeight - headerHeight + 2, width: 0, height: 18))
             topicPill.wantsLayer = true
             topicPill.layer?.backgroundColor = accentColor.withAlphaComponent(0.15).cgColor

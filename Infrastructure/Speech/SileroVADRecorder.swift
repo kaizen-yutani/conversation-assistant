@@ -13,7 +13,7 @@ class SileroVADRecorder: NSObject {
     // Model expects 576 samples at 16kHz (36ms chunks)
     private let sampleRate: Double = 16000
     private let chunkSize: Int = 576
-    private let speechThreshold: Float = 0.5
+    private let speechThreshold: Float = AppConstants.Thresholds.speechThreshold
 
     // LSTM state (must persist between chunks)
     private var hiddenState: MLMultiArray?
@@ -30,8 +30,8 @@ class SileroVADRecorder: NSObject {
     private var recordedAudioData: [Float] = []
 
     // Parameters - tuned for Silero VAD accuracy
-    private let minSpeechDuration: TimeInterval = 0.5
-    private let silenceTimeout: TimeInterval = 0.65  // Faster response (Silero's 87% accuracy allows shorter timeout)
+    private let minSpeechDuration: TimeInterval = AppConstants.Thresholds.minSpeechDuration
+    private let silenceTimeout: TimeInterval = AppConstants.Thresholds.silenceTimeout
 
     // Callbacks (same interface as VADAudioRecorder)
     var onLevelUpdate: ((Float, Bool) -> Void)?

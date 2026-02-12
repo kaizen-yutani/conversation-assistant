@@ -19,30 +19,27 @@ class MessageViewFactory {
     // MARK: - Message View Creation
 
     func createMessageView(for message: ConversationMessage) -> NSView {
-        // Determine styling based on message type
         let isQuestion = message.type == .question
         let isStatus = message.type == .status
         let isScreenshot = message.type == .screenshot
         let isAnswer = message.type == .answer || message.type == .followUp
 
-        // Layout: badge on left, card after badge, answers indented 20px
-        let badgeWidth: CGFloat = 22
-        let badgeGap: CGFloat = 8
+        // Layout: badge on left, card after badge, answers indented
+        let badgeSize: CGFloat = 28
+        let badgeGap: CGFloat = 10
         let answerIndent: CGFloat = 20
 
-        // Badge position: questions at 0, answers indented
         let badgeX: CGFloat = isAnswer ? answerIndent : 0
-        // Card starts after badge
-        let cardX: CGFloat = badgeX + badgeWidth + badgeGap
+        let cardX: CGFloat = badgeX + badgeSize + badgeGap
         let cardWidth = containerWidth - 40 - cardX
 
         // Layout constants
-        let headerHeight: CGFloat = 28
-        let contentPadding: CGFloat = 12
-        let textWidth = cardWidth - 52  // Account for icon and padding
+        let headerHeight: CGFloat = 32
+        let contentPadding: CGFloat = 20
+        let textWidth = cardWidth - 52
 
         // Create content view first to measure actual height
-        let contentView = NSTextView(frame: NSRect(x: 12, y: 0, width: textWidth + 28, height: 1000))
+        let contentView = NSTextView(frame: NSRect(x: 16, y: 0, width: textWidth + 28, height: 1000))
         contentView.isEditable = false
         contentView.isSelectable = true
         contentView.drawsBackground = false
@@ -51,66 +48,70 @@ class MessageViewFactory {
         contentView.textContainer?.lineFragmentPadding = 0
         contentView.textContainer?.containerSize = NSSize(width: textWidth + 28, height: CGFloat.greatestFiniteMagnitude)
 
-        // Apply formatting
         let attributedContent = formatMessageContent(message.content, isQuestion: isQuestion)
         contentView.textStorage?.setAttributedString(attributedContent)
 
-        // Get actual text height from layout manager
         contentView.layoutManager?.ensureLayout(for: contentView.textContainer!)
         let actualTextHeight = contentView.layoutManager?.usedRect(for: contentView.textContainer!).height ?? 30
         let viewHeight = max(actualTextHeight + headerHeight + contentPadding * 2, 60)
 
-        // Now set correct frame for content view
-        contentView.frame = NSRect(x: 12, y: contentPadding, width: textWidth + 28, height: actualTextHeight)
+        contentView.frame = NSRect(x: 16, y: contentPadding, width: textWidth + 28, height: actualTextHeight)
 
-        // Outer container to hold badge + card
+        // Outer container
         let outerContainer = NSView(frame: NSRect(x: 20, y: 0, width: containerWidth - 40, height: viewHeight))
 
-        // Q/A Badge - small monochrome pill on the left
+        // Badge — Dynamic Island style circle with tinted bg + ring border
         if isQuestion || isAnswer {
             let badgeText = isQuestion ? "Q" : "A"
-            let badgeColor = isQuestion ? NSColor.appleGold : NSColor.appleGreen
+            let badgeColor = isQuestion ? NSColor.messageQuestion : NSColor.messageAnswer
 
-            let badge = NSView(frame: NSRect(x: badgeX, y: viewHeight - 26, width: badgeWidth, height: badgeWidth))
+            let badge = NSView(frame: NSRect(x: badgeX, y: viewHeight - 30, width: badgeSize, height: badgeSize))
             badge.wantsLayer = true
-            badge.layer?.backgroundColor = badgeColor.withAlphaComponent(0.15).cgColor
-            badge.layer?.cornerRadius = badgeWidth / 2
+            badge.layer?.backgroundColor = badgeColor.withAlphaComponent(0.18).cgColor
+            badge.layer?.cornerRadius = badgeSize / 2
+            badge.layer?.borderWidth = 1
+            badge.layer?.borderColor = badgeColor.withAlphaComponent(0.40).cgColor
 
             let badgeLabel = NSTextField(labelWithString: badgeText)
-            badgeLabel.frame = NSRect(x: 0, y: 3, width: badgeWidth, height: 16)
-            badgeLabel.font = .systemFont(ofSize: 11, weight: .bold)
+            badgeLabel.frame = NSRect(x: 0, y: 5, width: badgeSize, height: 18)
+            badgeLabel.font = .systemFont(ofSize: 13, weight: .bold)
             badgeLabel.textColor = badgeColor
             badgeLabel.alignment = .center
             badge.addSubview(badgeLabel)
             outerContainer.addSubview(badge)
         }
 
-        // Main card container with subtle background
+        // Main card container
         let container = NSView(frame: NSRect(x: cardX, y: 0, width: cardWidth, height: viewHeight))
         container.wantsLayer = true
-        container.layer?.cornerRadius = 12
+        container.layer?.cornerRadius = 16
 
         let accentColor: NSColor
         let symbolName: String
 
         if isQuestion {
-            accentColor = NSColor.appleGold
+            accentColor = NSColor.messageQuestion
             symbolName = "mic.fill"
         } else if isStatus {
-            accentColor = NSColor.white.withAlphaComponent(0.5)
+            accentColor = NSColor.textTertiary
             symbolName = "info.circle.fill"
         } else if isScreenshot {
-            accentColor = NSColor.applePurple
+            accentColor = NSColor.messageScreenshot
             symbolName = "camera.fill"
         } else {
-            // Answer, followUp, userResponse all treated as AI response
-            accentColor = NSColor.appleGreen
+            accentColor = NSColor.messageAnswer
             symbolName = "sparkles"
         }
 
-        // No card background - clean look
+        // Card background — subtle tinted surface with border
+        if isQuestion || isAnswer {
+            let tintAlpha: CGFloat = isQuestion ? 0.04 : 0.05
+            container.layer?.backgroundColor = accentColor.withAlphaComponent(tintAlpha).cgColor
+            container.layer?.borderWidth = 1
+            container.layer?.borderColor = NSColor.white.withAlphaComponent(0.12).cgColor
+        }
 
-        // Left accent bar - thinner and more subtle
+        // Left accent bar
         let accentBar = NSView(frame: NSRect(x: 0, y: 0, width: 3, height: viewHeight))
         accentBar.wantsLayer = true
         accentBar.layer?.backgroundColor = accentColor.cgColor
@@ -121,66 +122,65 @@ class MessageViewFactory {
         // SF Symbol icon
         let iconSize: CGFloat = 16
         if let symbolImage = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil) {
-            let iconView = NSImageView(frame: NSRect(x: 12, y: viewHeight - headerHeight + 2, width: iconSize, height: iconSize))
+            let iconView = NSImageView(frame: NSRect(x: 16, y: viewHeight - headerHeight + 4, width: iconSize, height: iconSize))
             iconView.image = symbolImage
             iconView.contentTintColor = accentColor
             iconView.imageScaling = .scaleProportionallyUpOrDown
             container.addSubview(iconView)
         }
 
-        // Header label only for status/screenshot (Q/A have badges instead)
+        // Header label for status/screenshot
         if isStatus || isScreenshot {
             let headerText = isStatus ? "Status" : "Screenshot"
             let headerLabel = NSTextField(labelWithString: headerText)
-            headerLabel.frame = NSRect(x: 32, y: viewHeight - headerHeight + 2, width: 80, height: 18)
+            headerLabel.frame = NSRect(x: 36, y: viewHeight - headerHeight + 4, width: 80, height: 18)
             headerLabel.font = .systemFont(ofSize: 11, weight: .semibold)
             headerLabel.textColor = accentColor
             container.addSubview(headerLabel)
         }
 
-        // Topic badge if present - modern pill style
-        let topicX: CGFloat = (isStatus || isScreenshot) ? 110 : 32
+        // Topic badge — modern pill
+        let topicX: CGFloat = (isStatus || isScreenshot) ? 114 : 36
         if let topic = message.topic, topic != "followUp" && topic != "answer" && topic != "unknown" {
-            let topicPill = NSView(frame: NSRect(x: topicX, y: viewHeight - headerHeight + 2, width: 0, height: 18))
+            let topicPill = NSView(frame: NSRect(x: topicX, y: viewHeight - headerHeight + 4, width: 0, height: 20))
             topicPill.wantsLayer = true
-            topicPill.layer?.backgroundColor = accentColor.withAlphaComponent(0.15).cgColor
-            topicPill.layer?.cornerRadius = 9
+            topicPill.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.08).cgColor
+            topicPill.layer?.cornerRadius = 10
+            topicPill.layer?.borderWidth = 1
+            topicPill.layer?.borderColor = NSColor.white.withAlphaComponent(0.12).cgColor
 
             let topicLabel = NSTextField(labelWithString: topic.lowercased())
             topicLabel.font = .systemFont(ofSize: 10, weight: .medium)
-            topicLabel.textColor = accentColor
+            topicLabel.textColor = NSColor.textSecondary
             topicLabel.sizeToFit()
 
             let pillWidth = topicLabel.frame.width + 16
             topicPill.frame.size.width = pillWidth
-            topicLabel.frame.origin = NSPoint(x: 8, y: 2)
+            topicLabel.frame.origin = NSPoint(x: 8, y: 3)
             topicPill.addSubview(topicLabel)
             container.addSubview(topicPill)
         }
 
-        // Latency label (if available)
+        // Latency label
         if let latencyDisplay = message.displayLatency {
-            let latencyLabel = NSTextField(labelWithString: "⚡\(latencyDisplay)")
+            let latencyLabel = NSTextField(labelWithString: "\(latencyDisplay)")
             latencyLabel.font = .monospacedDigitSystemFont(ofSize: 10, weight: .medium)
-            latencyLabel.textColor = NSColor.appleGreen.withAlphaComponent(0.7)
+            latencyLabel.textColor = NSColor.accentPrimary.withAlphaComponent(0.7)
             latencyLabel.sizeToFit()
             let latencyWidth = latencyLabel.frame.width + 8
-            latencyLabel.frame = NSRect(x: cardWidth - 80 - latencyWidth, y: viewHeight - headerHeight + 2, width: latencyLabel.frame.width, height: 18)
+            latencyLabel.frame = NSRect(x: cardWidth - 80 - latencyWidth, y: viewHeight - headerHeight + 4, width: latencyLabel.frame.width, height: 18)
             container.addSubview(latencyLabel)
         }
 
-        // Time label - right aligned, subtle
+        // Time label
         let timeLabel = NSTextField(labelWithString: message.displayTime)
-        timeLabel.frame = NSRect(x: cardWidth - 80, y: viewHeight - headerHeight + 2, width: 70, height: 18)
+        timeLabel.frame = NSRect(x: cardWidth - 80, y: viewHeight - headerHeight + 4, width: 70, height: 18)
         timeLabel.font = .monospacedDigitSystemFont(ofSize: 10, weight: .regular)
-        timeLabel.textColor = NSColor.white.withAlphaComponent(0.35)
+        timeLabel.textColor = NSColor.textTertiary
         timeLabel.alignment = .right
         container.addSubview(timeLabel)
 
-        // Add the pre-measured content view
         container.addSubview(contentView)
-
-        // Add card to outer container
         outerContainer.addSubview(container)
 
         return outerContainer
@@ -189,10 +189,10 @@ class MessageViewFactory {
     // MARK: - Text Formatting
 
     func formatMessageContent(_ text: String, isQuestion: Bool) -> NSAttributedString {
-        let baseFont = isQuestion ? NSFont.systemFont(ofSize: 18, weight: .medium) : NSFont.systemFont(ofSize: 17, weight: .regular)
-        let codeFont = NSFont.monospacedSystemFont(ofSize: 16, weight: .regular)
-        let labelFont = NSFont.systemFont(ofSize: 16, weight: .semibold)
-        let codeBgColor = NSColor(red: 0.12, green: 0.13, blue: 0.15, alpha: 0.5)
+        let baseFont = isQuestion ? NSFont.systemFont(ofSize: 16, weight: .medium) : NSFont.systemFont(ofSize: 15, weight: .regular)
+        let codeFont = NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
+        let labelFont = NSFont.systemFont(ofSize: 15, weight: .semibold)
+        let codeBgColor = NSColor.codeBackground.withAlphaComponent(0.5)
 
         let result = NSMutableAttributedString()
         let lines = text.components(separatedBy: "\n")
@@ -203,11 +203,9 @@ class MessageViewFactory {
         for (index, line) in lines.enumerated() {
             if line.hasPrefix("```") {
                 if inCodeBlock {
-                    // End code block - apply syntax highlighting
                     if !codeBlockContent.isEmpty {
                         let highlighted = syntaxHighlighter.highlight(codeBlockContent, language: codeBlockLanguage.isEmpty ? nil : codeBlockLanguage)
                         let mutableHighlighted = NSMutableAttributedString(attributedString: highlighted)
-                        // Apply background to entire code block
                         mutableHighlighted.addAttribute(NSAttributedString.Key.backgroundColor, value: codeBgColor, range: NSRange(location: 0, length: mutableHighlighted.length))
                         result.append(mutableHighlighted)
                     }
@@ -215,18 +213,16 @@ class MessageViewFactory {
                     codeBlockLanguage = ""
                     inCodeBlock = false
                 } else {
-                    // Start code block - extract language
                     codeBlockLanguage = String(line.dropFirst(3)).trimmingCharacters(in: .whitespaces)
                     inCodeBlock = true
                 }
             } else if inCodeBlock {
                 codeBlockContent += (codeBlockContent.isEmpty ? "" : "\n") + line
             } else {
-                // Format line based on content type
                 let formattedLine = formatAnswerLine(line, baseFont: baseFont, codeFont: codeFont, labelFont: labelFont)
                 result.append(formattedLine)
                 if index < lines.count - 1 {
-                    let attrs: [NSAttributedString.Key: Any] = [.font: baseFont, .foregroundColor: NSColor.white]
+                    let attrs: [NSAttributedString.Key: Any] = [.font: baseFont, .foregroundColor: NSColor.textPrimary]
                     result.append(NSAttributedString(string: "\n", attributes: attrs))
                 }
             }
@@ -237,10 +233,10 @@ class MessageViewFactory {
 
     private func formatAnswerLine(_ line: String, baseFont: NSFont, codeFont: NSFont, labelFont: NSFont) -> NSAttributedString {
         let result = NSMutableAttributedString()
-        let baseAttrs: [NSAttributedString.Key: Any] = [.font: baseFont, .foregroundColor: NSColor.white]
+        let baseAttrs: [NSAttributedString.Key: Any] = [.font: baseFont, .foregroundColor: NSColor.textPrimary]
         let trimmedLine = line.trimmingCharacters(in: .whitespaces)
 
-        // Check for comparison format: "X: value | Y: value"
+        // Comparison format: "X: value | Y: value"
         if trimmedLine.contains(" | ") && trimmedLine.contains(":") {
             let parts = trimmedLine.components(separatedBy: " | ")
             for (idx, part) in parts.enumerated() {
@@ -248,8 +244,7 @@ class MessageViewFactory {
                     let label = String(part[..<colonIndex])
                     let value = String(part[part.index(after: colonIndex)...]).trimmingCharacters(in: .whitespaces)
 
-                    // Colored label
-                    let labelColor = idx == 0 ? NSColor.systemCyan : NSColor.systemPink
+                    let labelColor = idx == 0 ? NSColor.accentPrimary : NSColor.messageScreenshot
                     let labelAttrs: [NSAttributedString.Key: Any] = [
                         .font: labelFont,
                         .foregroundColor: labelColor
@@ -257,7 +252,6 @@ class MessageViewFactory {
                     result.append(NSAttributedString(string: label, attributes: labelAttrs))
                     result.append(NSAttributedString(string: ": ", attributes: baseAttrs))
 
-                    // Value with inline code support
                     let valueFormatted = formatInlineCode(value, baseAttrs: baseAttrs, codeFont: codeFont)
                     result.append(valueFormatted)
                 } else {
@@ -267,7 +261,7 @@ class MessageViewFactory {
                 if idx < parts.count - 1 {
                     let separatorAttrs: [NSAttributedString.Key: Any] = [
                         .font: baseFont,
-                        .foregroundColor: NSColor.gray
+                        .foregroundColor: NSColor.textTertiary
                     ]
                     result.append(NSAttributedString(string: "  │  ", attributes: separatorAttrs))
                 }
@@ -275,18 +269,17 @@ class MessageViewFactory {
             return result
         }
 
-        // Check for bullet point
+        // Bullet points
         let bulletPrefixes = ["• ", "- ", "* ", "· ", "▸ "]
         for prefix in bulletPrefixes {
             if trimmedLine.hasPrefix(prefix) {
                 let content = String(trimmedLine.dropFirst(prefix.count))
                 let bulletAttrs: [NSAttributedString.Key: Any] = [
                     .font: baseFont,
-                    .foregroundColor: NSColor.appleGold
+                    .foregroundColor: NSColor.accentPrimary
                 ]
                 result.append(NSAttributedString(string: "▸ ", attributes: bulletAttrs))
 
-                // Check if bullet content has comparison format
                 if content.contains(" | ") && content.contains(":") {
                     let innerFormatted = formatAnswerLine(content, baseFont: baseFont, codeFont: codeFont, labelFont: labelFont)
                     result.append(innerFormatted)
@@ -297,13 +290,13 @@ class MessageViewFactory {
             }
         }
 
-        // Check for "When to use:" or similar headers
+        // Header-like prefixes
         let headerPrefixes = ["When to use:", "Use case:", "Tip:", "Note:", "Gotcha:", "Senior tip:"]
         for prefix in headerPrefixes {
             if trimmedLine.lowercased().hasPrefix(prefix.lowercased()) {
                 let headerAttrs: [NSAttributedString.Key: Any] = [
                     .font: labelFont,
-                    .foregroundColor: NSColor.systemOrange
+                    .foregroundColor: NSColor.accentWarning
                 ]
                 result.append(NSAttributedString(string: prefix, attributes: headerAttrs))
                 let rest = String(trimmedLine.dropFirst(prefix.count))
@@ -312,14 +305,12 @@ class MessageViewFactory {
             }
         }
 
-        // Regular line with inline code support
         return formatInlineCode(line, baseAttrs: baseAttrs, codeFont: codeFont)
     }
 
     private func formatInlineCode(_ text: String, baseAttrs: [NSAttributedString.Key: Any], codeFont: NSFont) -> NSAttributedString {
         let result = NSMutableAttributedString()
 
-        // Combined pattern for **bold** and `code`
         let pattern = "\\*\\*([^*]+)\\*\\*|`([^`]+)`"
 
         guard let regex = try? NSRegularExpression(pattern: pattern) else {
@@ -332,28 +323,26 @@ class MessageViewFactory {
         for match in matches {
             guard let matchRange = Range(match.range, in: text) else { continue }
 
-            // Add text before match
             if lastEnd < matchRange.lowerBound {
                 let beforeText = String(text[lastEnd..<matchRange.lowerBound])
                 result.append(NSAttributedString(string: beforeText, attributes: baseAttrs))
             }
 
-            // Check which group matched: group 1 = bold, group 2 = code
             if let boldRange = Range(match.range(at: 1), in: text) {
-                // **bold** text - yellow and bold
+                // **bold** — white and bold weight
                 let boldText = String(text[boldRange])
                 let boldAttrs: [NSAttributedString.Key: Any] = [
-                    .font: NSFont.systemFont(ofSize: 17, weight: .semibold),
-                    .foregroundColor: NSColor.appleGold
+                    .font: NSFont.systemFont(ofSize: 15, weight: .semibold),
+                    .foregroundColor: NSColor.textHero
                 ]
                 result.append(NSAttributedString(string: boldText, attributes: boldAttrs))
             } else if let codeRange = Range(match.range(at: 2), in: text) {
-                // `code` text - orange monospace
+                // `code` — warm peach monospace
                 let codeText = String(text[codeRange])
                 let codeAttrs: [NSAttributedString.Key: Any] = [
                     .font: codeFont,
-                    .foregroundColor: NSColor.systemOrange,
-                    .backgroundColor: NSColor.black.withAlphaComponent(0.2)
+                    .foregroundColor: NSColor.codeInline,
+                    .backgroundColor: NSColor.white.withAlphaComponent(0.08)
                 ]
                 result.append(NSAttributedString(string: codeText, attributes: codeAttrs))
             }
@@ -361,7 +350,6 @@ class MessageViewFactory {
             lastEnd = matchRange.upperBound
         }
 
-        // Add remaining text
         if lastEnd < text.endIndex {
             let remainingText = String(text[lastEnd...])
             result.append(NSAttributedString(string: remainingText, attributes: baseAttrs))
@@ -371,7 +359,7 @@ class MessageViewFactory {
     }
 
     func estimateTextHeight(_ text: String, width: CGFloat) -> CGFloat {
-        let font = NSFont.systemFont(ofSize: 17)
+        let font = NSFont.systemFont(ofSize: 15)
         let attributes: [NSAttributedString.Key: Any] = [.font: font]
         let attributedString = NSAttributedString(string: text, attributes: attributes)
         let boundingRect = attributedString.boundingRect(

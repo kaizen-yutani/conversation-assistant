@@ -105,8 +105,24 @@ class AppSettings {
 
     private let languageKey = "ConversationAssistant.Language"
     private let techStackKey = "ConversationAssistant.TechStack"
+    private let useStreamingSTTKey = "ConversationAssistant.UseStreamingSTT"
 
     private init() {}
+
+    /// Enable Deepgram streaming STT (requires DEEPGRAM_API_KEY)
+    var useStreamingSTT: Bool {
+        get {
+            // Default to true if Deepgram key is available
+            if !UserDefaults.standard.bool(forKey: useStreamingSTTKey + ".set") {
+                return ApiKeyManager.shared.hasKey(.deepgram)
+            }
+            return UserDefaults.standard.bool(forKey: useStreamingSTTKey)
+        }
+        set {
+            UserDefaults.standard.set(newValue, forKey: useStreamingSTTKey)
+            UserDefaults.standard.set(true, forKey: useStreamingSTTKey + ".set")
+        }
+    }
 
     var language: AppLanguage {
         get {
