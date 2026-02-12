@@ -7,7 +7,40 @@ class JiraClient: Tool {
     let name = "search_jira"
     let displayName = "Jira"
 
+    var supportedToolNames: [String] {
+        ["search_jira", "list_jira_projects", "get_sprint_info", "list_jira_boards", "create_jira_issue", "add_jira_comment"]
+    }
+
     private init() {}
+
+    func execute(toolName: String, input: [String: Any]) async throws -> ToolResult {
+        switch toolName {
+        case "list_jira_projects":
+            return try await listProjects(input: input)
+        case "get_sprint_info":
+            return try await getSprintInfo(input: input)
+        case "list_jira_boards":
+            return try await listBoards(input: input)
+        case "create_jira_issue":
+            return try await createIssue(input: input)
+        case "add_jira_comment":
+            return try await addComment(input: input)
+        default:
+            return try await execute(input: input)
+        }
+    }
+
+    func testConnection() async -> ToolResult {
+        do {
+            let result = try await listProjects(input: ["limit": "1"])
+            if result.success {
+                return .success(content: "Jira connected")
+            }
+            return result
+        } catch {
+            return .failure(error: error.localizedDescription)
+        }
+    }
 
     /// Get a specific ticket by key (e.g., PROJ-123)
     func getTicket(key: String) async throws -> ToolResult {
@@ -260,7 +293,7 @@ class JiraClient: Tool {
 
             // Add project filter if specified
             if let project = project {
-                jql += " AND project = \"\(project)\""
+                jql += " AND project = \"\(escapeJql(project))\""
             }
 
             jql += " ORDER BY updated DESC"
@@ -305,7 +338,7 @@ class JiraClient: Tool {
         
         if isUserSearch {
             // Search by assignee name (using ~ for partial match)
-            jql = "\(searchField) ~ \"\(userName)\""
+            jql = "\(searchField) ~ \"\(escapeJql(userName))\""
             
             // Check for status keywords
             for status in statusPatterns {
@@ -320,12 +353,12 @@ class JiraClient: Tool {
             }
         } else {
             // Default to text search
-            jql = "text ~ \"\(query)\""
+            jql = "text ~ \"\(escapeJql(query))\""
         }
         
         // Add project filter if specified
         if let project = project {
-            jql += " AND project = \"\(project)\""
+            jql += " AND project = \"\(escapeJql(project))\""
         }
         
         jql += " ORDER BY updated DESC"
@@ -733,6 +766,177 @@ class JiraClient: Tool {
             throw ToolError.executionFailed("Invalid URL")
         }
         return (url, baseUrl)
+    }
+
+    /// Escape user input for safe embedding in JQL queries
+    private func escapeJql(_ value: String) -> String {
+        return value
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+    }
+
+    // MARK: - Create Issue
+
+    func createIssue(input: [String: Any]) async throws -> ToolResult {
+        guard let project = input["project"] as? String else {
+            throw ToolError.missingParameter("project")
+        }
+        guard let summary = input["summary"] as? String else {
+            throw ToolError.missingParameter("summary")
+        }
+        let description = input["description"] as? String
+        let issueType = (input["issue_type"] as? String) ?? "Task"
+        let priority = input["priority"] as? String
+
+        var fields: [String: Any] = [
+            "project": ["key": project],
+            "summary": summary,
+            "issuetype": ["name": issueType]
+        ]
+
+        if let description = description {
+            fields["description"] = [
+                "version": 1,
+                "type": "doc",
+                "content": [
+                    ["type": "paragraph", "content": [
+                        ["type": "text", "text": description]
+                    ]]
+                ]
+            ] as [String: Any]
+        }
+
+        if let priority = priority {
+            fields["priority"] = ["name": priority]
+        }
+
+        let body: [String: Any] = ["fields": fields]
+        let url = try await getCreateIssueApiUrl()
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue(await getAuthHeader(), forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw ToolError.executionFailed("Invalid response")
+        }
+
+        guard httpResponse.statusCode == 201 else {
+            let errorMessage = parseJiraError(statusCode: httpResponse.statusCode, data: data)
+            return .success(content: errorMessage)
+        }
+
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let key = json["key"] as? String else {
+            return .success(content: "Issue created but could not parse response.")
+        }
+
+        let (_, siteUrl) = try await getBoardsApiUrl(project: nil, type: nil)
+        return .success(content: "Created **\(key)**: \(summary)\nURL: \(siteUrl)/browse/\(key)")
+    }
+
+    private func getCreateIssueApiUrl() async throws -> URL {
+        if DataSourceConfig.shared.isOAuthAuthenticated(.confluence),
+           let token = await OAuthManager.shared.getValidAccessToken(for: .atlassian) {
+            var cloudId = DataSourceConfig.shared.getValue(for: .confluence, field: "cloudId")
+            if cloudId == nil {
+                try await fetchAccessibleResources(token: token)
+                cloudId = DataSourceConfig.shared.getValue(for: .confluence, field: "cloudId")
+            }
+            guard let cloudId = cloudId else {
+                throw ToolError.executionFailed("Could not determine Jira site.")
+            }
+            guard let url = URL(string: "https://api.atlassian.com/ex/jira/\(cloudId)/rest/api/3/issue") else {
+                throw ToolError.executionFailed("Invalid URL")
+            }
+            return url
+        }
+
+        guard let config = DataSourceConfig.shared.confluenceConfig else {
+            throw ToolError.notConfigured("Jira")
+        }
+        let baseUrl = config.baseUrl.replacingOccurrences(of: "/wiki", with: "")
+        guard let url = URL(string: "\(baseUrl)/rest/api/3/issue") else {
+            throw ToolError.executionFailed("Invalid URL")
+        }
+        return url
+    }
+
+    // MARK: - Add Comment
+
+    func addComment(input: [String: Any]) async throws -> ToolResult {
+        guard let issueKey = input["issue_key"] as? String else {
+            throw ToolError.missingParameter("issue_key")
+        }
+        guard let comment = input["comment"] as? String else {
+            throw ToolError.missingParameter("comment")
+        }
+
+        let body: [String: Any] = [
+            "body": [
+                "version": 1,
+                "type": "doc",
+                "content": [
+                    ["type": "paragraph", "content": [
+                        ["type": "text", "text": comment]
+                    ]]
+                ]
+            ] as [String: Any]
+        ]
+
+        let url = try await getCommentApiUrl(issueKey: issueKey)
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue(await getAuthHeader(), forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw ToolError.executionFailed("Invalid response")
+        }
+
+        guard httpResponse.statusCode == 201 else {
+            let errorMessage = parseJiraError(statusCode: httpResponse.statusCode, data: data)
+            return .success(content: errorMessage)
+        }
+
+        return .success(content: "Comment added to \(issueKey)")
+    }
+
+    private func getCommentApiUrl(issueKey: String) async throws -> URL {
+        if DataSourceConfig.shared.isOAuthAuthenticated(.confluence),
+           let token = await OAuthManager.shared.getValidAccessToken(for: .atlassian) {
+            var cloudId = DataSourceConfig.shared.getValue(for: .confluence, field: "cloudId")
+            if cloudId == nil {
+                try await fetchAccessibleResources(token: token)
+                cloudId = DataSourceConfig.shared.getValue(for: .confluence, field: "cloudId")
+            }
+            guard let cloudId = cloudId else {
+                throw ToolError.executionFailed("Could not determine Jira site.")
+            }
+            guard let url = URL(string: "https://api.atlassian.com/ex/jira/\(cloudId)/rest/api/3/issue/\(issueKey)/comment") else {
+                throw ToolError.executionFailed("Invalid URL")
+            }
+            return url
+        }
+
+        guard let config = DataSourceConfig.shared.confluenceConfig else {
+            throw ToolError.notConfigured("Jira")
+        }
+        let baseUrl = config.baseUrl.replacingOccurrences(of: "/wiki", with: "")
+        guard let url = URL(string: "\(baseUrl)/rest/api/3/issue/\(issueKey)/comment") else {
+            throw ToolError.executionFailed("Invalid URL")
+        }
+        return url
     }
 
     /// Parse Jira API errors into user-friendly messages

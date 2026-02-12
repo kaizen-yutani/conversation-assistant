@@ -7,7 +7,36 @@ class ConfluenceClient: Tool {
     let name = "search_documentation"
     let displayName = "Confluence"
 
+    var supportedToolNames: [String] {
+        ["search_documentation", "get_confluence_page", "list_confluence_spaces", "create_confluence_page"]
+    }
+
     private init() {}
+
+    func execute(toolName: String, input: [String: Any]) async throws -> ToolResult {
+        switch toolName {
+        case "get_confluence_page":
+            return try await getPage(input: input)
+        case "list_confluence_spaces":
+            return try await listSpaces(input: input)
+        case "create_confluence_page":
+            return try await createPage(input: input)
+        default:
+            return try await execute(input: input)
+        }
+    }
+
+    func testConnection() async -> ToolResult {
+        do {
+            let result = try await listSpaces(input: ["limit": "1"])
+            if result.success {
+                return .success(content: "Confluence connected")
+            }
+            return result
+        } catch {
+            return .failure(error: error.localizedDescription)
+        }
+    }
 
     var isConfigured: Bool {
         // Check OAuth first (with cloudId), then Basic Auth
@@ -43,10 +72,12 @@ class ConfluenceClient: Tool {
 
         let space = input["space"] as? String
 
-        // Build CQL query
-        var cql = "text ~ \"\(query)\""
+        // Build CQL query (escape quotes to prevent injection)
+        let escapedQuery = query.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
+        var cql = "text ~ \"\(escapedQuery)\""
         if let space = space {
-            cql += " AND space = \"\(space)\""
+            let escapedSpace = space.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
+            cql += " AND space = \"\(escapedSpace)\""
         }
         cql += " ORDER BY lastModified DESC"
 
@@ -250,7 +281,8 @@ class ConfluenceClient: Tool {
         // If we have a title but no page ID, search for the page
         if let title = title, pageId == nil {
             // Search for the page by title
-            let cql = "title = \"\(title)\""
+            let escapedTitle = title.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
+            let cql = "title = \"\(escapedTitle)\""
             guard let encodedCql = cql.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else {
                 throw ToolError.executionFailed("Invalid search query")
             }
@@ -349,6 +381,83 @@ class ConfluenceClient: Tool {
             throw ToolError.executionFailed("Invalid URL")
         }
         return (url, baseUrl)
+    }
+
+    // MARK: - Create Page
+
+    func createPage(input: [String: Any]) async throws -> ToolResult {
+        guard let space = input["space"] as? String else {
+            throw ToolError.missingParameter("space")
+        }
+        guard let title = input["title"] as? String else {
+            throw ToolError.missingParameter("title")
+        }
+        guard let content = input["content"] as? String else {
+            throw ToolError.missingParameter("content")
+        }
+
+        let body: [String: Any] = [
+            "type": "page",
+            "title": title,
+            "space": ["key": space],
+            "body": [
+                "storage": [
+                    "value": content,
+                    "representation": "storage"
+                ]
+            ]
+        ]
+
+        let url = try await getCreatePageApiUrl()
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue(await getAuthHeader(), forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw ToolError.executionFailed("Invalid response")
+        }
+
+        guard httpResponse.statusCode == 200 else {
+            let errorMessage = parseConfluenceError(statusCode: httpResponse.statusCode, data: data)
+            return .success(content: errorMessage)
+        }
+
+        let page = try JSONDecoder().decode(ConfluencePageResponse.self, from: data)
+        let (_, siteUrl) = try await getSpacesApiUrl(limit: 1)
+        return .success(content: "Created page: **\(page.title)**\nURL: \(siteUrl)/wiki\(page._links.webui)")
+    }
+
+    private func getCreatePageApiUrl() async throws -> URL {
+        if DataSourceConfig.shared.isOAuthAuthenticated(.confluence),
+           let token = await OAuthManager.shared.getValidAccessToken(for: .atlassian) {
+            var cloudId = DataSourceConfig.shared.getValue(for: .confluence, field: "cloudId")
+            if cloudId == nil {
+                try await fetchAccessibleResources(token: token)
+                cloudId = DataSourceConfig.shared.getValue(for: .confluence, field: "cloudId")
+            }
+            guard let cloudId = cloudId else {
+                throw ToolError.executionFailed("Could not determine Confluence site.")
+            }
+            guard let url = URL(string: "https://api.atlassian.com/ex/confluence/\(cloudId)/wiki/rest/api/content") else {
+                throw ToolError.executionFailed("Invalid URL")
+            }
+            return url
+        }
+
+        guard let config = DataSourceConfig.shared.confluenceConfig else {
+            throw ToolError.notConfigured("Confluence")
+        }
+        let baseUrl = config.baseUrl.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        guard let url = URL(string: "\(baseUrl)/wiki/rest/api/content") else {
+            throw ToolError.executionFailed("Invalid URL")
+        }
+        return url
     }
 
     /// Strip HTML tags from content (basic)

@@ -4,44 +4,53 @@ import Foundation
 protocol Tool {
     /// Unique name of the tool (must match ToolDefinition.name)
     var name: String { get }
-    
+
     /// Human-readable display name
     var displayName: String { get }
-    
+
+    /// All tool names this client handles (for multi-tool clients like GitHub, Jira)
+    var supportedToolNames: [String] { get }
+
     /// Whether this tool is properly configured and ready to use
     var isConfigured: Bool { get }
-    
-    /// Execute the tool with the given input parameters
-    /// - Parameter input: Dictionary of input parameters from Claude's tool use request
-    /// - Returns: ToolResult containing the output or error
+
+    /// Execute the tool with the given input parameters (single-tool clients)
     func execute(input: [String: Any]) async throws -> ToolResult
+
+    /// Execute a specific tool by name (multi-tool clients override this)
+    func execute(toolName: String, input: [String: Any]) async throws -> ToolResult
+
+    /// Test the connection to verify credentials work
+    func testConnection() async -> ToolResult
+}
+
+extension Tool {
+    var supportedToolNames: [String] { [name] }
+
+    func execute(toolName: String, input: [String: Any]) async throws -> ToolResult {
+        return try await execute(input: input)
+    }
+
+    func testConnection() async -> ToolResult {
+        return .failure(error: "Test not available for \(displayName)")
+    }
 }
 
 /// Result from executing a tool
 struct ToolResult {
-    /// Whether the tool execution was successful
     let success: Bool
-    
-    /// Content to send back to Claude for processing
     let content: String
-    
-    /// Optional URL to the source of the information
     let sourceUrl: String?
-    
-    /// Optional error message if execution failed
     let error: String?
-    
-    /// Create a successful result
+
     static func success(content: String, sourceUrl: String? = nil) -> ToolResult {
         ToolResult(success: true, content: content, sourceUrl: sourceUrl, error: nil)
     }
-    
-    /// Create a failure result
+
     static func failure(error: String) -> ToolResult {
         ToolResult(success: false, content: "", sourceUrl: nil, error: error)
     }
-    
-    /// Convert to dictionary format for Claude API
+
     func toAPIContent() -> [[String: Any]] {
         if success {
             return [["type": "text", "text": content]]
@@ -62,12 +71,12 @@ struct ToolUseRequest {
 struct ToolResultMessage {
     let toolUseId: String
     let content: [[String: Any]]
-    
+
     init(toolUseId: String, result: ToolResult) {
         self.toolUseId = toolUseId
         self.content = result.toAPIContent()
     }
-    
+
     func toDictionary() -> [String: Any] {
         return [
             "type": "tool_result",
@@ -83,7 +92,8 @@ enum ToolError: Error, LocalizedError {
     case notConfigured(String)
     case executionFailed(String)
     case unknownTool(String)
-    
+    case timeout(String)
+
     var errorDescription: String? {
         switch self {
         case .missingParameter(let param):
@@ -94,6 +104,8 @@ enum ToolError: Error, LocalizedError {
             return "Tool execution failed: \(message)"
         case .unknownTool(let name):
             return "Unknown tool: \(name)"
+        case .timeout(let tool):
+            return "Tool timed out: \(tool)"
         }
     }
 }

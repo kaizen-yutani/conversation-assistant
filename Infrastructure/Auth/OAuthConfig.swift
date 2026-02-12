@@ -5,25 +5,23 @@ enum OAuthProvider: String, CaseIterable {
     case atlassian
     case github
 
-    /// Client ID (registered once by developer)
+    /// Client ID loaded from ~/.conversation-assistant-oauth config file
     var clientId: String {
         switch self {
         case .atlassian:
-            return "ESn3aDRFOujV7xoQoEBt1ptXvIrci2uk"
+            return OAuthConfig.credentials["ATLASSIAN_CLIENT_ID"] ?? ""
         case .github:
-            // GitHub OAuth App client ID - register at https://github.com/settings/developers
-            return "Ov23li8H8nY8ufo1A4HS"
+            return OAuthConfig.credentials["GITHUB_CLIENT_ID"] ?? ""
         }
     }
 
-    /// Client Secret (registered once by developer)
+    /// Client Secret loaded from ~/.conversation-assistant-oauth config file
     var clientSecret: String {
         switch self {
         case .atlassian:
-            return "ATOA92GmXo9F4xxeON3VLVhbAkpDW7uVKrmIVrtRPNK8cMP_270_ZrZoMS5kP7mIQzOZ997C2094"
+            return OAuthConfig.credentials["ATLASSIAN_CLIENT_SECRET"] ?? ""
         case .github:
-            // GitHub OAuth App client secret
-            return "7169c36d0ad5b422ef9702a106a83b7856d07c32"
+            return OAuthConfig.credentials["GITHUB_CLIENT_SECRET"] ?? ""
         }
     }
 
@@ -56,11 +54,13 @@ enum OAuthProvider: String, CaseIterable {
                 "read:confluence-space.summary",
                 "read:confluence-content.summary",
                 "search:confluence",
-                "read:confluence-user"
+                "read:confluence-user",
+                "write:confluence-content.all"
             ]
             let jiraScopes = [
                 "read:jira-work",
-                "read:jira-user"
+                "read:jira-user",
+                "write:jira-work"
             ]
             let userScopes = ["read:me"]
             let authScopes = ["offline_access"]
@@ -127,6 +127,29 @@ enum OAuthProvider: String, CaseIterable {
 enum OAuthConfig {
     /// Custom URL scheme for OAuth callbacks
     static let urlScheme = "conversationassistant"
+
+    /// OAuth credentials loaded from ~/.conversation-assistant-oauth
+    /// File format: KEY=VALUE (one per line, # for comments)
+    /// Keys: ATLASSIAN_CLIENT_ID, ATLASSIAN_CLIENT_SECRET, GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET
+    static let credentials: [String: String] = {
+        let path = NSString("~/.conversation-assistant-oauth").expandingTildeInPath
+        guard let content = try? String(contentsOfFile: path, encoding: .utf8) else {
+            NSLog("OAuth: No credentials file at ~/.conversation-assistant-oauth — OAuth disabled")
+            return [:]
+        }
+        var config: [String: String] = [:]
+        for line in content.components(separatedBy: .newlines) {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            guard !trimmed.isEmpty, !trimmed.hasPrefix("#") else { continue }
+            if let eq = trimmed.firstIndex(of: "=") {
+                let key = String(trimmed[..<eq]).trimmingCharacters(in: .whitespaces)
+                let value = String(trimmed[trimmed.index(after: eq)...]).trimmingCharacters(in: .whitespaces)
+                config[key] = value
+            }
+        }
+        NSLog("OAuth: Loaded \(config.count) credentials from config file")
+        return config
+    }()
 
     /// Parse callback URL to extract provider and authorization code
     static func parseCallback(_ url: URL) -> (provider: OAuthProvider, code: String)? {

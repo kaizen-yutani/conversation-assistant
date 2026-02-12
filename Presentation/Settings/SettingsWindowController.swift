@@ -340,7 +340,7 @@ final class SettingsWindowController: NSWindowController {
         if sourceType == .confluence {
             let isOAuthConnected = OAuthManager.shared.isConnected(provider: .atlassian)
             let noteText = isOAuthConnected
-                ? "✓ Connected via OAuth (click status bar to manage)"
+                ? "Connected via OAuth (click status bar to manage)"
                 : "Click Confluence in status bar to connect"
             let noteLabel = NSTextField(labelWithString: noteText)
             noteLabel.frame = NSRect(x: 14, y: 35, width: cardWidth - 28, height: 20)
@@ -349,6 +349,18 @@ final class SettingsWindowController: NSWindowController {
                 ? NSColor.systemGreen.withAlphaComponent(0.8)
                 : NSColor.white.withAlphaComponent(0.5)
             card.addSubview(noteLabel)
+
+            if isOAuthConnected {
+                let testButton = NSButton(frame: NSRect(x: 14, y: 8, width: 130, height: 22))
+                testButton.title = "Test Connection"
+                testButton.bezelStyle = .inline
+                testButton.isBordered = false
+                testButton.font = .systemFont(ofSize: 11, weight: .medium)
+                testButton.contentTintColor = accentColor
+                testButton.target = self
+                testButton.action = #selector(testConfluenceConnection)
+                card.addSubview(testButton)
+            }
             return  // No manual fields for Confluence
         }
 
@@ -356,7 +368,7 @@ final class SettingsWindowController: NSWindowController {
         if sourceType == .github {
             let isOAuthConnected = OAuthManager.shared.isConnected(provider: .github)
             let noteText = isOAuthConnected
-                ? "✓ Connected via OAuth (click status bar to manage)"
+                ? "Connected via OAuth (click status bar to manage)"
                 : "Click GitHub in status bar to connect"
             let noteLabel = NSTextField(labelWithString: noteText)
             noteLabel.frame = NSRect(x: 14, y: 35, width: cardWidth - 28, height: 20)
@@ -365,6 +377,18 @@ final class SettingsWindowController: NSWindowController {
                 ? NSColor.systemGreen.withAlphaComponent(0.8)
                 : NSColor.white.withAlphaComponent(0.5)
             card.addSubview(noteLabel)
+
+            if isOAuthConnected {
+                let testButton = NSButton(frame: NSRect(x: 14, y: 8, width: 130, height: 22))
+                testButton.title = "Test Connection"
+                testButton.bezelStyle = .inline
+                testButton.isBordered = false
+                testButton.font = .systemFont(ofSize: 11, weight: .medium)
+                testButton.contentTintColor = accentColor
+                testButton.target = self
+                testButton.action = #selector(testGitHubConnection)
+                card.addSubview(testButton)
+            }
             return  // No manual fields for GitHub - use OAuth
         }
 
@@ -787,6 +811,43 @@ final class SettingsWindowController: NSWindowController {
     
     @objc private func cancelSettings() {
         window?.close()
+    }
+
+    // MARK: - Test Connection
+
+    @objc private func testConfluenceConnection() {
+        Task {
+            let result = await ToolExecutor.shared.testConnection(toolName: "search_documentation")
+            await MainActor.run { [weak self] in
+                self?.showTestResult(result, title: "Confluence")
+            }
+        }
+    }
+
+    @objc private func testGitHubConnection() {
+        Task {
+            let result = await ToolExecutor.shared.testConnection(toolName: "search_codebase")
+            await MainActor.run { [weak self] in
+                self?.showTestResult(result, title: "GitHub")
+            }
+        }
+    }
+
+    private func showTestResult(_ result: ToolResult, title: String) {
+        let alert = NSAlert()
+        if result.success {
+            alert.messageText = "\(title) Connected"
+            alert.informativeText = result.content
+            alert.alertStyle = .informational
+        } else {
+            alert.messageText = "\(title) Connection Failed"
+            alert.informativeText = result.error ?? "Unknown error"
+            alert.alertStyle = .warning
+        }
+        alert.addButton(withTitle: "OK")
+        if let window = self.window {
+            alert.beginSheetModal(for: window)
+        }
     }
 }
 

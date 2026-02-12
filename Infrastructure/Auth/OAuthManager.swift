@@ -13,7 +13,7 @@ class OAuthManager {
     static let shared = OAuthManager()
 
     /// Active OAuth state (provider + PKCE verifier)
-    private var pendingAuth: (provider: OAuthProvider, codeVerifier: String)?
+    private var pendingAuth: (provider: OAuthProvider, codeVerifier: String, state: String)?
 
     /// Local callback server for providers that use localhost redirect (like GitHub)
     private var callbackServer: OAuthCallbackServer?
@@ -48,8 +48,11 @@ class OAuthManager {
         let codeVerifier = provider.usesPKCE ? generateCodeVerifier() : ""
         let codeChallenge = provider.usesPKCE ? generateCodeChallenge(from: codeVerifier) : ""
 
-        // Store pending auth state
-        pendingAuth = (provider, codeVerifier)
+        // Generate state parameter for CSRF protection
+        let state = UUID().uuidString
+
+        // Store pending auth state (including state for validation on callback)
+        pendingAuth = (provider, codeVerifier, state)
 
         // Build authorization URL
         var components = URLComponents(string: provider.authorizeURL)!
@@ -57,7 +60,8 @@ class OAuthManager {
             URLQueryItem(name: "client_id", value: provider.clientId),
             URLQueryItem(name: "redirect_uri", value: provider.callbackURL),
             URLQueryItem(name: "scope", value: provider.scopes),
-            URLQueryItem(name: "response_type", value: "code")
+            URLQueryItem(name: "response_type", value: "code"),
+            URLQueryItem(name: "state", value: state)
         ]
 
         // Add PKCE parameters only for providers that use it
@@ -71,10 +75,6 @@ class OAuthManager {
             components.queryItems?.append(URLQueryItem(name: "audience", value: "api.atlassian.com"))
             components.queryItems?.append(URLQueryItem(name: "prompt", value: "consent"))
         }
-
-        // Generate state parameter for security
-        let state = UUID().uuidString
-        components.queryItems?.append(URLQueryItem(name: "state", value: state))
 
         guard let url = components.url else {
             NSLog("OAuth: Failed to build authorization URL")
@@ -189,6 +189,15 @@ class OAuthManager {
         guard let pending = pendingAuth, pending.provider == provider else {
             NSLog("OAuth: No pending auth for provider \(provider.rawValue). pendingAuth: \(pendingAuth?.provider.rawValue ?? "nil")")
             return
+        }
+
+        // Validate state parameter to prevent CSRF attacks
+        if let urlComponents = URLComponents(url: url, resolvingAgainstBaseURL: false),
+           let returnedState = urlComponents.queryItems?.first(where: { $0.name == "state" })?.value {
+            guard returnedState == pending.state else {
+                NSLog("OAuth: State mismatch — possible CSRF attack. Expected: \(pending.state), got: \(returnedState)")
+                return
+            }
         }
 
         NSLog("OAuth: Exchanging code for token...")

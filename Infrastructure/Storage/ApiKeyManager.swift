@@ -46,7 +46,13 @@ final class ApiKeyManager {
     }
 
     private init() {
-        self.filePath = NSString("~/.interview-master-keys").expandingTildeInPath
+        let newPath = NSString("~/.conversation-assistant-keys").expandingTildeInPath
+        let oldPath = NSString("~/.interview-master-keys").expandingTildeInPath
+        // Migrate from old filename if needed
+        if !FileManager.default.fileExists(atPath: newPath) && FileManager.default.fileExists(atPath: oldPath) {
+            try? FileManager.default.copyItem(atPath: oldPath, toPath: newPath)
+        }
+        self.filePath = newPath
         loadKeys()
     }
 

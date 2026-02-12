@@ -1914,39 +1914,12 @@ The function uses a **hash map** for `O(n)` time complexity.
         toolsContainer.distribution = .fill
         statusBar.addSubview(toolsContainer)
 
-        // Connection buttons - positioned after Groq with spacing
-        let connBtnStart: CGFloat = 180  // Start after Groq label
-        let connBtnSpacing: CGFloat = 12
-        var currentX = connBtnStart
-
-        // Confluence button
-        confluenceButton = ConnectionButton(frame: NSRect(x: currentX, y: 1, width: 100, height: 26))
-        confluenceButton.configure(icon: "book.closed.fill", label: "Confluence", accent: .systemBlue)
-        confluenceButton.target = self
-        confluenceButton.action = #selector(confluenceIndicatorClicked)
-        confluenceButton.toolTip = "Click to connect Confluence"
-        statusBar.addSubview(confluenceButton)
-        currentX += confluenceButton.frame.width + connBtnSpacing
-
-        // Jira button
-        jiraButton = ConnectionButton(frame: NSRect(x: currentX, y: 1, width: 60, height: 26))
-        jiraButton.configure(icon: "ticket.fill", label: "Jira", accent: .systemBlue)
-        jiraButton.target = self
-        jiraButton.action = #selector(jiraIndicatorClicked)
-        jiraButton.toolTip = "Click to connect Jira"
-        statusBar.addSubview(jiraButton)
-        currentX += jiraButton.frame.width + connBtnSpacing
-
-        // GitHub button
-        githubButton = ConnectionButton(frame: NSRect(x: currentX, y: 1, width: 80, height: 26))
-        githubButton.configure(icon: "chevron.left.forwardslash.chevron.right", label: "GitHub", accent: .systemPurple)
-        githubButton.target = self
-        githubButton.action = #selector(githubIndicatorClicked)
-        githubButton.toolTip = "Click to connect GitHub"
-        statusBar.addSubview(githubButton)
+        // Connection buttons - right-aligned before settings gear
+        let barWidth = statusBar.frame.width
+        let connBtnSpacing: CGFloat = 8
 
         // Settings button (far right)
-        let settingsBtn = NSButton(frame: NSRect(x: statusBar.frame.width - 36, y: 0, width: 28, height: 28))
+        let settingsBtn = NSButton(frame: NSRect(x: barWidth - 36, y: 0, width: 28, height: 28))
         settingsBtn.autoresizingMask = [.minXMargin]
         settingsBtn.title = ""
         settingsBtn.image = NSImage(systemSymbolName: "gearshape.fill", accessibilityDescription: "Settings")
@@ -1958,7 +1931,37 @@ The function uses a **hash map** for `O(n)` time complexity.
         settingsBtn.target = self
         settingsBtn.action = #selector(showSettings)
         statusBar.addSubview(settingsBtn)
-        
+
+        // GitHub button (right of Jira, left of settings)
+        var rightX = barWidth - 36 - connBtnSpacing - 80
+        githubButton = ConnectionButton(frame: NSRect(x: rightX, y: 1, width: 80, height: 26))
+        githubButton.autoresizingMask = [.minXMargin]
+        githubButton.configure(icon: "chevron.left.forwardslash.chevron.right", label: "GitHub", accent: .systemPurple)
+        githubButton.target = self
+        githubButton.action = #selector(githubIndicatorClicked)
+        githubButton.toolTip = "Click to connect GitHub"
+        statusBar.addSubview(githubButton)
+
+        // Jira button
+        rightX -= (60 + connBtnSpacing)
+        jiraButton = ConnectionButton(frame: NSRect(x: rightX, y: 1, width: 60, height: 26))
+        jiraButton.autoresizingMask = [.minXMargin]
+        jiraButton.configure(icon: "ticket.fill", label: "Jira", accent: .systemBlue)
+        jiraButton.target = self
+        jiraButton.action = #selector(jiraIndicatorClicked)
+        jiraButton.toolTip = "Click to connect Jira"
+        statusBar.addSubview(jiraButton)
+
+        // Confluence button
+        rightX -= (100 + connBtnSpacing)
+        confluenceButton = ConnectionButton(frame: NSRect(x: rightX, y: 1, width: 100, height: 26))
+        confluenceButton.autoresizingMask = [.minXMargin]
+        confluenceButton.configure(icon: "book.closed.fill", label: "Confluence", accent: .systemBlue)
+        confluenceButton.target = self
+        confluenceButton.action = #selector(confluenceIndicatorClicked)
+        confluenceButton.toolTip = "Click to connect Confluence"
+        statusBar.addSubview(confluenceButton)
+
         // Update status indicators based on current API key state
         updateStatusBarIndicators()
 
@@ -2281,7 +2284,11 @@ The function uses a **hash map** for `O(n)` time complexity.
         ]
 
         // Tools to show in container (exclude Confluence, Jira, and GitHub which have dedicated indicators)
-        let excludedTools = ["search_documentation", "search_jira", "search_codebase"]
+        let excludedTools = Set(
+            ConfluenceClient.shared.supportedToolNames +
+            JiraClient.shared.supportedToolNames +
+            GitHubClient.shared.supportedToolNames
+        )
         let toolStatus = ToolExecutor.shared.toolStatus
         let configuredTools = toolStatus.filter { $0.isConfigured && !excludedTools.contains($0.name) }
 

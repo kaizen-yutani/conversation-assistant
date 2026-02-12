@@ -295,6 +295,55 @@ enum AvailableTools {
         ], required: ["query"])
     )
 
+    /// Create a Jira issue
+    static let createJiraIssue = ToolDefinition(
+        name: "create_jira_issue",
+        description: """
+            Create a new Jira issue. USE THIS for:
+            - "create a ticket", "make a Jira issue"
+            - "log a bug in PROJ", "create a task"
+            Requires project key and summary. Optional: description, issue type, priority.
+            """,
+        input_schema: .object([
+            "project": .string("Jira project key (e.g., 'PROJ', 'AUTH')"),
+            "summary": .string("Issue title/summary"),
+            "description": .string("Optional: detailed description of the issue"),
+            "issue_type": .string("Optional: issue type (default: Task)", enum: ["Task", "Bug", "Story", "Epic"]),
+            "priority": .string("Optional: priority level", enum: ["Highest", "High", "Medium", "Low", "Lowest"])
+        ], required: ["project", "summary"])
+    )
+
+    /// Add a comment to a Jira issue
+    static let addJiraComment = ToolDefinition(
+        name: "add_jira_comment",
+        description: """
+            Add a comment to an existing Jira issue. USE THIS for:
+            - "comment on PROJ-123", "add a note to this ticket"
+            - "update the ticket with findings"
+            Requires issue key and comment text.
+            """,
+        input_schema: .object([
+            "issue_key": .string("Jira issue key (e.g., 'PROJ-123')"),
+            "comment": .string("The comment text to add")
+        ], required: ["issue_key", "comment"])
+    )
+
+    /// Create a Confluence page
+    static let createConfluencePage = ToolDefinition(
+        name: "create_confluence_page",
+        description: """
+            Create a new Confluence page. USE THIS for:
+            - "create a doc page", "write documentation"
+            - "create a page in space X"
+            Requires space key, title, and content.
+            """,
+        input_schema: .object([
+            "space": .string("Confluence space key (e.g., 'ENG', 'TEAM')"),
+            "title": .string("Page title"),
+            "content": .string("Page content (plain text or simple HTML)")
+        ], required: ["space", "title", "content"])
+    )
+
     /// All available tools
     static let all: [ToolDefinition] = [
         searchDocumentation,
@@ -309,6 +358,9 @@ enum AvailableTools {
         listJiraBoards,
         getConfluencePage,
         listConfluenceSpaces,
+        createJiraIssue,
+        addJiraComment,
+        createConfluencePage,
         queryDatabase,
         webSearch
     ]

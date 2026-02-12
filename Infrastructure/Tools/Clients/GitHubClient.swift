@@ -7,10 +7,53 @@ class GitHubClient: Tool {
     let name = "search_codebase"
     let displayName = "GitHub"
 
+    var supportedToolNames: [String] {
+        ["search_codebase", "list_repositories", "get_pr_details", "get_issue_details", "list_branches"]
+    }
+
     private init() {}
 
     var isConfigured: Bool {
         return DataSourceConfig.shared.githubConfig != nil
+    }
+
+    func execute(toolName: String, input: [String: Any]) async throws -> ToolResult {
+        switch toolName {
+        case "list_repositories":
+            return try await listRepositories(input: input)
+        case "get_pr_details":
+            return try await getPRDetails(input: input)
+        case "get_issue_details":
+            return try await getIssueDetails(input: input)
+        case "list_branches":
+            return try await listBranches(input: input)
+        default:
+            return try await execute(input: input)
+        }
+    }
+
+    func testConnection() async -> ToolResult {
+        guard let config = DataSourceConfig.shared.githubConfig else {
+            return .failure(error: "GitHub not configured")
+        }
+        do {
+            let url = URL(string: "https://api.github.com/user")!
+            var request = URLRequest(url: url)
+            request.setValue("Bearer \(config.token)", forHTTPHeaderField: "Authorization")
+            request.setValue("application/vnd.github.v3+json", forHTTPHeaderField: "Accept")
+            request.setValue("ConversationAssistant", forHTTPHeaderField: "User-Agent")
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+                return .failure(error: "GitHub auth failed (status \((response as? HTTPURLResponse)?.statusCode ?? 0))")
+            }
+            if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let login = json["login"] as? String {
+                return .success(content: "Connected as @\(login)")
+            }
+            return .success(content: "Connected")
+        } catch {
+            return .failure(error: error.localizedDescription)
+        }
     }
 
     func execute(input: [String: Any]) async throws -> ToolResult {
