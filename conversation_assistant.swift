@@ -277,140 +277,95 @@ class HoverButton: NSButton {
 
 // MARK: - Connection Button
 
-/// Stylized button for OAuth connection indicators (Confluence, Jira, GitHub)
+/// Minimal pill indicator for status bar services
 @available(macOS 14.0, *)
-class ConnectionButton: NSButton {
+class StatusPill: NSView {
     var isConnected = false {
         didSet { updateVisualState() }
     }
 
-    var accentColor: NSColor = .systemBlue
+    var onClick: (() -> Void)?
     private var trackingArea: NSTrackingArea?
     private var isHovered = false
 
-    // Subviews
     private let iconView = NSImageView()
     private let statusDot = NSView()
     private let labelView = NSTextField(labelWithString: "")
-    private let backgroundLayer = CALayer()
-
-    // Colors
-    private let connectedColor = NSColor.accentSuccess
-    private let disconnectedColor = NSColor.white.withAlphaComponent(0.30)
+    private let bgLayer = CALayer()
 
     override init(frame: NSRect) {
         super.init(frame: frame)
-        setupButton()
+        setup()
     }
 
     required init?(coder: NSCoder) {
         super.init(coder: coder)
-        setupButton()
+        setup()
     }
 
-    private func setupButton() {
-        title = ""
-        bezelStyle = .inline
-        isBordered = false
+    private func setup() {
         wantsLayer = true
+        layer?.cornerRadius = 11
+        layer?.masksToBounds = true
 
-        // Glass morphism effect — no gradients
-        layer?.cornerRadius = 12
-        layer?.borderWidth = 1.0
-        layer?.masksToBounds = false
+        bgLayer.cornerRadius = 11
+        layer?.insertSublayer(bgLayer, at: 0)
 
-        // Subtle shadow for depth
-        layer?.shadowColor = NSColor.black.cgColor
-        layer?.shadowOpacity = 0.15
-        layer?.shadowOffset = CGSize(width: 0, height: 1)
-        layer?.shadowRadius = 3
-
-        // Solid background layer (replaces gradient)
-        backgroundLayer.cornerRadius = 12
-        backgroundLayer.masksToBounds = true
-        layer?.insertSublayer(backgroundLayer, at: 0)
-
-        // Icon
-        iconView.frame = NSRect(x: 10, y: 6, width: 14, height: 14)
-        iconView.contentTintColor = .white.withAlphaComponent(0.9)
-        iconView.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 11, weight: .semibold)
+        iconView.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 9, weight: .medium)
         addSubview(iconView)
 
-        // Status dot
-        statusDot.frame = NSRect(x: 26, y: 10, width: 6, height: 6)
         statusDot.wantsLayer = true
-        statusDot.layer?.cornerRadius = 3
+        statusDot.layer?.cornerRadius = 2.5
         addSubview(statusDot)
 
-        // Label
-        labelView.frame = NSRect(x: 36, y: 5, width: 60, height: 16)
-        labelView.font = .systemFont(ofSize: 11, weight: .semibold)
-        labelView.textColor = .white.withAlphaComponent(0.95)
+        labelView.font = .systemFont(ofSize: 10.5, weight: .medium)
+        labelView.lineBreakMode = .byClipping
         addSubview(labelView)
 
         updateVisualState()
     }
 
-    override func layout() {
-        super.layout()
-        backgroundLayer.frame = bounds
-    }
-
-    func configure(icon: String, label: String, accent: NSColor) {
+    func configure(icon: String, label: String) {
         iconView.image = NSImage(systemSymbolName: icon, accessibilityDescription: label)
         labelView.stringValue = label
-        accentColor = accent
-
-        // Auto-size based on label width
         labelView.sizeToFit()
-        let labelWidth = labelView.frame.width
-        let newWidth = 10 + 14 + 4 + 6 + 4 + labelWidth + 12  // icon padding + icon + gap + dot + gap + label + end padding
-        frame.size.width = newWidth
-        labelView.frame = NSRect(x: 36, y: 5, width: labelWidth, height: 16)
 
-        updateVisualState()
+        let labelWidth = ceil(labelView.intrinsicContentSize.width) + 2
+        let totalWidth = 8 + 12 + 4 + 5 + 4 + labelWidth + 10
+        let height: CGFloat = 22
+
+        frame.size = CGSize(width: totalWidth, height: height)
+        iconView.frame = NSRect(x: 8, y: 4, width: 12, height: 12)
+        statusDot.frame = NSRect(x: 24, y: 8.5, width: 5, height: 5)
+        labelView.frame = NSRect(x: 33, y: 3, width: labelWidth, height: 14)
+    }
+
+    override func layout() {
+        super.layout()
+        bgLayer.frame = bounds
     }
 
     private func updateVisualState() {
-        backgroundLayer.frame = bounds
+        bgLayer.frame = bounds
 
         if isConnected {
-            let baseColor = connectedColor
-            backgroundLayer.backgroundColor = baseColor.withAlphaComponent(isHovered ? 0.20 : 0.10).cgColor
-            layer?.borderColor = baseColor.withAlphaComponent(isHovered ? 0.45 : 0.25).cgColor
-            statusDot.layer?.backgroundColor = baseColor.cgColor
-
-            // Subtle glow on connected dot
-            statusDot.layer?.shadowColor = baseColor.cgColor
-            statusDot.layer?.shadowRadius = 4
-            statusDot.layer?.shadowOffset = .zero
-            statusDot.layer?.shadowOpacity = 0.5
-
-            iconView.contentTintColor = baseColor.blended(withFraction: 0.3, of: .white)
+            let green = NSColor.accentSuccess
+            bgLayer.backgroundColor = green.withAlphaComponent(isHovered && onClick != nil ? 0.15 : 0.10).cgColor
+            statusDot.layer?.backgroundColor = green.cgColor
+            iconView.contentTintColor = green.blended(withFraction: 0.3, of: .white)
             labelView.textColor = .textPrimary
         } else {
-            if isHovered {
-                backgroundLayer.backgroundColor = accentColor.withAlphaComponent(0.12).cgColor
-                layer?.borderColor = accentColor.withAlphaComponent(0.30).cgColor
-                iconView.contentTintColor = accentColor.blended(withFraction: 0.5, of: .white)
-            } else {
-                backgroundLayer.backgroundColor = NSColor.white.withAlphaComponent(0.06).cgColor
-                layer?.borderColor = NSColor.white.withAlphaComponent(0.12).cgColor
-                iconView.contentTintColor = .white.withAlphaComponent(0.7)
-            }
-
-            statusDot.layer?.backgroundColor = disconnectedColor.cgColor
-            statusDot.layer?.shadowOpacity = 0
-            labelView.textColor = .white.withAlphaComponent(isHovered ? 1.0 : 0.8)
+            bgLayer.backgroundColor = NSColor.white.withAlphaComponent(isHovered && onClick != nil ? 0.08 : 0.04).cgColor
+            statusDot.layer?.backgroundColor = NSColor.textTertiary.withAlphaComponent(0.4).cgColor
+            iconView.contentTintColor = .textTertiary
+            labelView.textColor = .textTertiary
         }
     }
 
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
-        if let existing = trackingArea {
-            removeTrackingArea(existing)
-        }
-        // Use .activeAlways to ensure tracking works even when window isn't key
+        if let existing = trackingArea { removeTrackingArea(existing) }
+        guard onClick != nil else { return }
         trackingArea = NSTrackingArea(
             rect: bounds,
             options: [.mouseEnteredAndExited, .activeAlways],
@@ -421,53 +376,39 @@ class ConnectionButton: NSButton {
     }
 
     override func mouseEntered(with event: NSEvent) {
+        guard onClick != nil else { return }
         isHovered = true
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = 0.15
-            self.animator().layer?.transform = CATransform3DMakeScale(1.03, 1.03, 1.0)
-        }
         updateVisualState()
     }
 
     override func mouseExited(with event: NSEvent) {
+        guard onClick != nil else { return }
         isHovered = false
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = 0.2
-            self.animator().layer?.transform = CATransform3DIdentity
-        }
         updateVisualState()
     }
 
     override func mouseDown(with event: NSEvent) {
-        print("[ConnectionButton] mouseDown on '\(labelView.stringValue)'")
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = 0.08
-            self.animator().layer?.transform = CATransform3DMakeScale(0.96, 0.96, 1.0)
-            self.animator().alphaValue = 0.8
+        guard onClick != nil else { return }
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.08
+            self.animator().alphaValue = 0.85
         }
     }
 
     override func mouseUp(with event: NSEvent) {
-        print("[ConnectionButton] mouseUp on '\(labelView.stringValue)'")
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = 0.15
-            self.animator().layer?.transform = isHovered ? CATransform3DMakeScale(1.03, 1.03, 1.0) : CATransform3DIdentity
+        guard let onClick = onClick else { return }
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.15
             self.animator().alphaValue = 1.0
         }
-
-        // Use hit testing as reliable check (works even if tracking area didn't fire)
-        let locationInView = convert(event.locationInWindow, from: nil)
-        let isMouseInBounds = bounds.contains(locationInView)
-
-        print("[ConnectionButton] isHovered=\(isHovered), isMouseInBounds=\(isMouseInBounds), target=\(target != nil), action=\(action != nil)")
-
-        // Send action if mouse is still over the button (use hit test OR isHovered)
-        if (isMouseInBounds || isHovered), let target = target, let action = action {
-            print("[ConnectionButton] Sending action for '\(labelView.stringValue)'")
-            _ = target.perform(action, with: self)
-        } else {
-            print("[ConnectionButton] NOT sending action - conditions not met")
+        let loc = convert(event.locationInWindow, from: nil)
+        if bounds.contains(loc) || isHovered {
+            onClick()
         }
+    }
+
+    override var intrinsicContentSize: NSSize {
+        return frame.size
     }
 }
 
@@ -501,17 +442,17 @@ class ConversationAssistantDelegate: NSObject, NSApplicationDelegate, NSTextView
     
     // Bottom status bar
     var statusBar: NSView!
-    var anthropicStatusDot: NSView!
-    var speechStatusDot: NSView!
-    var confluenceStatusDot: NSView!
-    var jiraStatusDot: NSView!
-    var githubStatusDot: NSView!
-    var toolsContainer: NSStackView!  // Container for tool indicators
-
-    // Clickable indicator buttons for data sources (OAuth connections)
-    var confluenceButton: ConnectionButton!
-    var jiraButton: ConnectionButton!
-    var githubButton: ConnectionButton!
+    var claudePill: StatusPill!
+    var speechPill: StatusPill!
+    var databasePill: StatusPill!
+    var webSearchPill: StatusPill!
+    var confluencePill: StatusPill!
+    var jiraPill: StatusPill!
+    var githubPill: StatusPill!
+    var leftGroup: NSStackView!
+    var middleGroup: NSStackView!
+    var rightGroup: NSStackView!
+    var middleSeparator: NSView!
     var notesContentView: NSView!
     var codingContentView: NSView!
     var voiceContentView: NSView!
@@ -1876,110 +1817,117 @@ The function uses a **hash map** for `O(n)` time complexity.
         searchResultsLabel.alignment = .right
         searchContainer.addSubview(searchResultsLabel)
 
-        // Bottom status bar - transparent container for layout only (no background)
-        statusBar = NSView(frame: NSRect(x: 20, y: 15, width: contentView.frame.width - 40, height: 28))
-        statusBar.autoresizingMask = [.width, .maxYMargin]
+        // Bottom status bar - Auto Layout based
+        statusBar = NSView()
+        statusBar.translatesAutoresizingMaskIntoConstraints = false
         contentView.addSubview(statusBar)
+        NSLayoutConstraint.activate([
+            statusBar.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 20),
+            statusBar.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -20),
+            statusBar.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -15),
+            statusBar.heightAnchor.constraint(equalToConstant: 22)
+        ])
 
-        // Claude status indicator
-        let claudeIcon = NSImageView(frame: NSRect(x: 12, y: 6, width: 14, height: 14))
-        claudeIcon.image = NSImage(systemSymbolName: "sparkles", accessibilityDescription: "Claude")
-        claudeIcon.contentTintColor = NSColor.white.withAlphaComponent(0.7)
-        claudeIcon.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 10, weight: .medium)
-        statusBar.addSubview(claudeIcon)
-        
-        anthropicStatusDot = NSView(frame: NSRect(x: 28, y: 10, width: 6, height: 6))
-        anthropicStatusDot.wantsLayer = true
-        anthropicStatusDot.layer?.cornerRadius = 3
-        anthropicStatusDot.layer?.backgroundColor = NSColor(red: 1.0, green: 0.6, blue: 0.0, alpha: 1.0).cgColor
-        statusBar.addSubview(anthropicStatusDot)
-        
-        let claudeLabel = NSTextField(labelWithString: "Claude")
-        claudeLabel.frame = NSRect(x: 38, y: 6, width: 45, height: 14)
-        claudeLabel.font = .systemFont(ofSize: 10, weight: .medium)
-        claudeLabel.textColor = NSColor.white.withAlphaComponent(0.6)
-        statusBar.addSubview(claudeLabel)
-        
-        // Separator
-        let sep1 = NSView(frame: NSRect(x: 90, y: 8, width: 1, height: 10))
-        sep1.wantsLayer = true
-        sep1.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.15).cgColor
-        statusBar.addSubview(sep1)
-        
-        // Speech status indicator (Deepgram)
-        let speechIcon = NSImageView(frame: NSRect(x: 100, y: 6, width: 14, height: 14))
-        speechIcon.image = NSImage(systemSymbolName: "waveform", accessibilityDescription: "Speech")
-        speechIcon.contentTintColor = NSColor.white.withAlphaComponent(0.7)
-        speechIcon.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 10, weight: .medium)
-        statusBar.addSubview(speechIcon)
+        // Create pills
+        claudePill = StatusPill()
+        claudePill.configure(icon: "sparkles", label: "Claude")
 
-        speechStatusDot = NSView(frame: NSRect(x: 116, y: 10, width: 6, height: 6))
-        speechStatusDot.wantsLayer = true
-        speechStatusDot.layer?.cornerRadius = 3
-        speechStatusDot.layer?.backgroundColor = NSColor(red: 1.0, green: 0.6, blue: 0.0, alpha: 1.0).cgColor
-        statusBar.addSubview(speechStatusDot)
+        speechPill = StatusPill()
+        speechPill.configure(icon: "waveform", label: "Speech")
 
-        let speechLabel = NSTextField(labelWithString: "Speech")
-        speechLabel.frame = NSRect(x: 126, y: 6, width: 45, height: 14)
-        speechLabel.font = .systemFont(ofSize: 10, weight: .medium)
-        speechLabel.textColor = NSColor.white.withAlphaComponent(0.6)
-        statusBar.addSubview(speechLabel)
+        databasePill = StatusPill()
+        databasePill.configure(icon: "cylinder.split.1x2", label: "Database")
+        databasePill.isHidden = true
 
-        // Tools container (will be populated dynamically for other tools)
-        toolsContainer = NSStackView(frame: NSRect(x: 175, y: 4, width: 40, height: 20))
-        toolsContainer.orientation = .horizontal
-        toolsContainer.spacing = 10
-        toolsContainer.alignment = .centerY
-        toolsContainer.distribution = .fill
-        statusBar.addSubview(toolsContainer)
+        webSearchPill = StatusPill()
+        webSearchPill.configure(icon: "globe", label: "WebSearch")
+        webSearchPill.isHidden = true
 
-        // Connection buttons - right-aligned before settings gear
-        let barWidth = statusBar.frame.width
-        let connBtnSpacing: CGFloat = 8
+        confluencePill = StatusPill()
+        confluencePill.configure(icon: "book.closed.fill", label: "Confluence")
+        confluencePill.onClick = { [weak self] in self?.confluenceIndicatorClicked() }
 
-        // Settings button (far right)
-        let settingsBtn = NSButton(frame: NSRect(x: barWidth - 36, y: 0, width: 28, height: 28))
-        settingsBtn.autoresizingMask = [.minXMargin]
+        jiraPill = StatusPill()
+        jiraPill.configure(icon: "ticket.fill", label: "Jira")
+        jiraPill.onClick = { [weak self] in self?.jiraIndicatorClicked() }
+
+        githubPill = StatusPill()
+        githubPill.configure(icon: "chevron.left.forwardslash.chevron.right", label: "GitHub")
+        githubPill.onClick = { [weak self] in self?.githubIndicatorClicked() }
+
+        // Left group: Claude + Speech
+        leftGroup = NSStackView(views: [claudePill, speechPill])
+        leftGroup.orientation = .horizontal
+        leftGroup.spacing = 6
+        leftGroup.translatesAutoresizingMaskIntoConstraints = false
+
+        // Middle separator
+        middleSeparator = NSView()
+        middleSeparator.wantsLayer = true
+        middleSeparator.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.15).cgColor
+        middleSeparator.translatesAutoresizingMaskIntoConstraints = false
+
+        // Middle group: Database + WebSearch
+        middleGroup = NSStackView(views: [databasePill, webSearchPill])
+        middleGroup.orientation = .horizontal
+        middleGroup.spacing = 6
+        middleGroup.translatesAutoresizingMaskIntoConstraints = false
+
+        // Right group: Confluence + Jira + GitHub
+        rightGroup = NSStackView(views: [confluencePill, jiraPill, githubPill])
+        rightGroup.orientation = .horizontal
+        rightGroup.spacing = 6
+        rightGroup.translatesAutoresizingMaskIntoConstraints = false
+
+        // Settings gear
+        let settingsBtn = NSButton()
+        settingsBtn.translatesAutoresizingMaskIntoConstraints = false
         settingsBtn.title = ""
         settingsBtn.image = NSImage(systemSymbolName: "gearshape.fill", accessibilityDescription: "Settings")
         settingsBtn.imagePosition = .imageOnly
         settingsBtn.bezelStyle = .inline
         settingsBtn.isBordered = false
-        settingsBtn.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 16, weight: .medium)
-        settingsBtn.contentTintColor = NSColor.white.withAlphaComponent(0.6)
+        settingsBtn.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 12, weight: .medium)
+        settingsBtn.contentTintColor = .textTertiary
         settingsBtn.target = self
         settingsBtn.action = #selector(showSettings)
-        statusBar.addSubview(settingsBtn)
 
-        // GitHub button (right of Jira, left of settings)
-        var rightX = barWidth - 36 - connBtnSpacing - 80
-        githubButton = ConnectionButton(frame: NSRect(x: rightX, y: 1, width: 80, height: 26))
-        githubButton.autoresizingMask = [.minXMargin]
-        githubButton.configure(icon: "chevron.left.forwardslash.chevron.right", label: "GitHub", accent: .systemPurple)
-        githubButton.target = self
-        githubButton.action = #selector(githubIndicatorClicked)
-        githubButton.toolTip = "Click to connect GitHub"
-        statusBar.addSubview(githubButton)
+        // Right separator before settings
+        let rightSep = NSView()
+        rightSep.wantsLayer = true
+        rightSep.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.15).cgColor
+        rightSep.translatesAutoresizingMaskIntoConstraints = false
 
-        // Jira button
-        rightX -= (60 + connBtnSpacing)
-        jiraButton = ConnectionButton(frame: NSRect(x: rightX, y: 1, width: 60, height: 26))
-        jiraButton.autoresizingMask = [.minXMargin]
-        jiraButton.configure(icon: "ticket.fill", label: "Jira", accent: .systemBlue)
-        jiraButton.target = self
-        jiraButton.action = #selector(jiraIndicatorClicked)
-        jiraButton.toolTip = "Click to connect Jira"
-        statusBar.addSubview(jiraButton)
+        // Add all to status bar
+        for v in [leftGroup!, middleSeparator!, middleGroup!, rightGroup!, rightSep, settingsBtn] as [NSView] {
+            statusBar.addSubview(v)
+        }
 
-        // Confluence button
-        rightX -= (100 + connBtnSpacing)
-        confluenceButton = ConnectionButton(frame: NSRect(x: rightX, y: 1, width: 100, height: 26))
-        confluenceButton.autoresizingMask = [.minXMargin]
-        confluenceButton.configure(icon: "book.closed.fill", label: "Confluence", accent: .systemBlue)
-        confluenceButton.target = self
-        confluenceButton.action = #selector(confluenceIndicatorClicked)
-        confluenceButton.toolTip = "Click to connect Confluence"
-        statusBar.addSubview(confluenceButton)
+        NSLayoutConstraint.activate([
+            leftGroup.leadingAnchor.constraint(equalTo: statusBar.leadingAnchor),
+            leftGroup.centerYAnchor.constraint(equalTo: statusBar.centerYAnchor),
+
+            middleSeparator.leadingAnchor.constraint(equalTo: leftGroup.trailingAnchor, constant: 8),
+            middleSeparator.widthAnchor.constraint(equalToConstant: 1),
+            middleSeparator.heightAnchor.constraint(equalToConstant: 12),
+            middleSeparator.centerYAnchor.constraint(equalTo: statusBar.centerYAnchor),
+
+            middleGroup.leadingAnchor.constraint(equalTo: middleSeparator.trailingAnchor, constant: 8),
+            middleGroup.centerYAnchor.constraint(equalTo: statusBar.centerYAnchor),
+
+            settingsBtn.trailingAnchor.constraint(equalTo: statusBar.trailingAnchor),
+            settingsBtn.centerYAnchor.constraint(equalTo: statusBar.centerYAnchor),
+            settingsBtn.widthAnchor.constraint(equalToConstant: 22),
+            settingsBtn.heightAnchor.constraint(equalToConstant: 22),
+
+            rightSep.trailingAnchor.constraint(equalTo: settingsBtn.leadingAnchor, constant: -8),
+            rightSep.widthAnchor.constraint(equalToConstant: 1),
+            rightSep.heightAnchor.constraint(equalToConstant: 12),
+            rightSep.centerYAnchor.constraint(equalTo: statusBar.centerYAnchor),
+
+            rightGroup.trailingAnchor.constraint(equalTo: rightSep.leadingAnchor, constant: -8),
+            rightGroup.centerYAnchor.constraint(equalTo: statusBar.centerYAnchor),
+        ])
 
         // Update status indicators based on current API key state
         updateStatusBarIndicators()
@@ -2263,87 +2211,37 @@ The function uses a **hash map** for `O(n)` time complexity.
     
     /// Update the bottom status bar API indicators
     func updateStatusBarIndicators() {
-        let hasAnthropic = ApiKeyManager.shared.hasKey(.anthropic)
-        let hasDeepgram = ApiKeyManager.shared.hasKey(.deepgram)
-        let hasConfluence = ConfluenceClient.shared.isConfigured
-        let hasJira = JiraClient.shared.isConfigured
-        let hasGitHub = GitHubClient.shared.isConfigured
+        claudePill.isConnected = ApiKeyManager.shared.hasKey(.anthropic)
+        speechPill.isConnected = ApiKeyManager.shared.hasKey(.deepgram)
+        confluencePill.isConnected = ConfluenceClient.shared.isConfigured
+        jiraPill.isConnected = JiraClient.shared.isConfigured
+        githubPill.isConnected = GitHubClient.shared.isConfigured
 
-        let greenColor = NSColor(red: 0.204, green: 0.780, blue: 0.349, alpha: 1.0).cgColor
-        let orangeColor = NSColor(red: 1.0, green: 0.6, blue: 0.0, alpha: 1.0).cgColor
-
-        // Update API status dots (Anthropic, Speech/Deepgram)
-        NSAnimationContext.runAnimationGroup({ context in
-            context.duration = 0.3
-            anthropicStatusDot.layer?.backgroundColor = hasAnthropic ? greenColor : orangeColor
-            speechStatusDot.layer?.backgroundColor = hasDeepgram ? greenColor : orangeColor
-        })
-
-        // Update connection buttons (Confluence, Jira, GitHub)
-        confluenceButton.isConnected = hasConfluence
-        jiraButton.isConnected = hasJira
-        githubButton.isConnected = hasGitHub
-
-        // Update tooltips based on connection state
         updateToolTips()
-
-        // Update tools container (for other tools like Database, WebSearch - excluding GitHub which has dedicated indicator)
         updateToolsIndicators()
     }
 
-    /// Update the tools section in status bar (for tools other than Confluence/Jira/GitHub which have dedicated indicators)
+    /// Update tool pill visibility based on configured tools
     func updateToolsIndicators() {
-        // Clear existing tool indicators
-        toolsContainer.arrangedSubviews.forEach { $0.removeFromSuperview() }
-
-        // Tool icons mapping
-        let toolIcons: [String: String] = [
-            "query_database": "cylinder.split.1x2",               // Database
-            "web_search": "globe"                                 // Web Search
-        ]
-
-        // Tools to show in container (exclude Confluence, Jira, and GitHub which have dedicated indicators)
         let excludedTools = Set(
             ConfluenceClient.shared.supportedToolNames +
             JiraClient.shared.supportedToolNames +
             GitHubClient.shared.supportedToolNames
         )
         let toolStatus = ToolExecutor.shared.toolStatus
-        let configuredTools = toolStatus.filter { $0.isConfigured && !excludedTools.contains($0.name) }
+        let configuredNames = Set(toolStatus.filter { $0.isConfigured && !excludedTools.contains($0.name) }.map { $0.name })
 
-        for tool in configuredTools {
-            // Create container for each tool
-            let toolView = NSView(frame: NSRect(x: 0, y: 0, width: 50, height: 20))
+        let hasDB = configuredNames.contains("query_database")
+        let hasWeb = configuredNames.contains("web_search")
 
-            // Tool icon
-            let iconName = toolIcons[tool.name] ?? "wrench"
-            let icon = NSImageView(frame: NSRect(x: 0, y: 3, width: 14, height: 14))
-            icon.image = NSImage(systemSymbolName: iconName, accessibilityDescription: tool.displayName)
-            icon.contentTintColor = NSColor.white.withAlphaComponent(0.7)
-            icon.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 10, weight: .medium)
-            toolView.addSubview(icon)
+        databasePill.isHidden = !hasDB
+        databasePill.isConnected = hasDB
+        webSearchPill.isHidden = !hasWeb
+        webSearchPill.isConnected = hasWeb
 
-            // Status dot (green = configured)
-            let dot = NSView(frame: NSRect(x: 16, y: 7, width: 6, height: 6))
-            dot.wantsLayer = true
-            dot.layer?.cornerRadius = 3
-            dot.layer?.backgroundColor = NSColor(red: 0.204, green: 0.780, blue: 0.349, alpha: 1.0).cgColor
-            toolView.addSubview(dot)
-
-            // Tool label (short name)
-            let label = NSTextField(labelWithString: tool.displayName)
-            label.frame = NSRect(x: 24, y: 3, width: 60, height: 14)
-            label.font = .systemFont(ofSize: 10, weight: .medium)
-            label.textColor = NSColor.white.withAlphaComponent(0.6)
-            label.lineBreakMode = .byTruncatingTail
-            toolView.addSubview(label)
-
-            // Set width based on label
-            let labelWidth = label.intrinsicContentSize.width
-            toolView.frame.size.width = min(24 + labelWidth, 80)
-
-            toolsContainer.addArrangedSubview(toolView)
-        }
+        let hasMiddle = hasDB || hasWeb
+        middleSeparator.isHidden = !hasMiddle
+        middleGroup.isHidden = !hasMiddle
     }
 
     // Voice search feature removed - not working correctly
@@ -3792,11 +3690,11 @@ The function uses a **hash map** for `O(n)` time complexity.
 
     private func updateToolTips() {
         let isAtlassianConnected = OAuthManager.shared.isConnected(provider: .atlassian)
-        confluenceButton.toolTip = isAtlassianConnected ? "Click to disconnect Confluence" : "Click to connect Confluence"
-        jiraButton.toolTip = isAtlassianConnected ? "Click to disconnect Jira" : "Click to connect Jira"
+        confluencePill.toolTip = isAtlassianConnected ? "Click to disconnect Confluence" : "Click to connect Confluence"
+        jiraPill.toolTip = isAtlassianConnected ? "Click to disconnect Jira" : "Click to connect Jira"
 
         let isGitHubConnected = OAuthManager.shared.isConnected(provider: .github)
-        githubButton.toolTip = isGitHubConnected ? "Click to disconnect GitHub" : "Click to connect GitHub"
+        githubPill.toolTip = isGitHubConnected ? "Click to disconnect GitHub" : "Click to connect GitHub"
     }
 
     func maskApiKey(_ key: String) -> String {
