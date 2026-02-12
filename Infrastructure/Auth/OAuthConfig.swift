@@ -54,13 +54,11 @@ enum OAuthProvider: String, CaseIterable {
                 "read:confluence-space.summary",
                 "read:confluence-content.summary",
                 "search:confluence",
-                "read:confluence-user",
-                "write:confluence-content.all"
+                "read:confluence-user"
             ]
             let jiraScopes = [
                 "read:jira-work",
-                "read:jira-user",
-                "write:jira-work"
+                "read:jira-user"
             ]
             let userScopes = ["read:me"]
             let authScopes = ["offline_access"]
