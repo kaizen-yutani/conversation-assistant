@@ -47,7 +47,7 @@ class JiraClient: Tool {
         let (apiUrl, siteUrl) = try await getTicketApiUrl(key: key)
 
         var request = URLRequest(url: apiUrl)
-        request.setValue(await getAuthHeader(), forHTTPHeaderField: "Authorization")
+        request.setValue(try await getAuthHeader(), forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
 
         let (data, response) = try await URLSession.shared.data(for: request)
@@ -142,7 +142,8 @@ class JiraClient: Tool {
     }
 
     /// Get auth header with automatic token refresh for OAuth
-    private func getAuthHeader() async -> String {
+    /// Throws if no valid authentication is available
+    private func getAuthHeader() async throws -> String {
         // Use OAuth if available (shared with Confluence) - with automatic token refresh
         if DataSourceConfig.shared.isOAuthAuthenticated(.confluence) {
             if let token = await OAuthManager.shared.getValidAccessToken(for: .atlassian) {
@@ -153,7 +154,9 @@ class JiraClient: Tool {
         }
 
         // Fall back to Basic Auth
-        guard let config = DataSourceConfig.shared.confluenceConfig else { return "" }
+        guard let config = DataSourceConfig.shared.confluenceConfig else {
+            throw ToolError.executionFailed("Authentication unavailable. Please reconnect Atlassian in Settings (⌘,).")
+        }
         let credentials = "\(config.username):\(config.apiToken)"
         let data = credentials.data(using: .utf8)!
         return "Basic \(data.base64EncodedString())"
@@ -164,19 +167,21 @@ class JiraClient: Tool {
             throw ToolError.missingParameter("query")
         }
 
+        let validatedQuery = try validateQueryInput(query)
+
         // Check if query is a specific ticket key (e.g., PROJ-123, ABC-1)
         let ticketPattern = "^[A-Z]{2,10}-\\d+$"
         if let regex = try? NSRegularExpression(pattern: ticketPattern, options: .caseInsensitive),
-           regex.firstMatch(in: query, options: [], range: NSRange(query.startIndex..., in: query)) != nil {
+           regex.firstMatch(in: validatedQuery, options: [], range: NSRange(validatedQuery.startIndex..., in: validatedQuery)) != nil {
             // Fetch specific ticket directly
-            return try await getTicket(key: query.uppercased())
+            return try await getTicket(key: validatedQuery.uppercased())
         }
 
         // Determine base URL and API URL based on auth method
-        let (apiUrl, siteUrl) = try await getApiUrl(query: query, project: input["project"] as? String)
+        let (apiUrl, siteUrl) = try await getApiUrl(query: validatedQuery, project: input["project"] as? String)
 
         var request = URLRequest(url: apiUrl)
-        request.setValue(await getAuthHeader(), forHTTPHeaderField: "Authorization")
+        request.setValue(try await getAuthHeader(), forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
 
         do {
@@ -459,7 +464,7 @@ class JiraClient: Tool {
         let (apiUrl, siteUrl) = try await getProjectsApiUrl(limit: limit)
 
         var request = URLRequest(url: apiUrl)
-        request.setValue(await getAuthHeader(), forHTTPHeaderField: "Authorization")
+        request.setValue(try await getAuthHeader(), forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
 
         let (data, response) = try await URLSession.shared.data(for: request)
@@ -532,7 +537,7 @@ class JiraClient: Tool {
         let (apiUrl, siteUrl) = try await getBoardsApiUrl(project: project, type: boardType)
 
         var request = URLRequest(url: apiUrl)
-        request.setValue(await getAuthHeader(), forHTTPHeaderField: "Authorization")
+        request.setValue(try await getAuthHeader(), forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
 
         let (data, response) = try await URLSession.shared.data(for: request)
@@ -623,7 +628,7 @@ class JiraClient: Tool {
             siteUrl = site
 
             var request = URLRequest(url: boardsUrl)
-            request.setValue(await getAuthHeader(), forHTTPHeaderField: "Authorization")
+            request.setValue(try await getAuthHeader(), forHTTPHeaderField: "Authorization")
             request.setValue("application/json", forHTTPHeaderField: "Accept")
 
             let (data, response) = try await URLSession.shared.data(for: request)
@@ -643,7 +648,7 @@ class JiraClient: Tool {
         let (sprintsUrl, _) = try await getSprintsApiUrl(boardId: boardId, state: sprintState)
 
         var sprintRequest = URLRequest(url: sprintsUrl)
-        sprintRequest.setValue(await getAuthHeader(), forHTTPHeaderField: "Authorization")
+        sprintRequest.setValue(try await getAuthHeader(), forHTTPHeaderField: "Authorization")
         sprintRequest.setValue("application/json", forHTTPHeaderField: "Accept")
 
         let (sprintData, sprintResponse) = try await URLSession.shared.data(for: sprintRequest)
@@ -675,7 +680,7 @@ class JiraClient: Tool {
             // Fetch sprint issues
             let (issuesUrl, _) = try await getSprintIssuesApiUrl(sprintId: sprint.id)
             var issuesRequest = URLRequest(url: issuesUrl)
-            issuesRequest.setValue(await getAuthHeader(), forHTTPHeaderField: "Authorization")
+            issuesRequest.setValue(try await getAuthHeader(), forHTTPHeaderField: "Authorization")
             issuesRequest.setValue("application/json", forHTTPHeaderField: "Accept")
 
             if let (issuesData, issuesResponse) = try? await URLSession.shared.data(for: issuesRequest),
@@ -768,11 +773,27 @@ class JiraClient: Tool {
         return (url, baseUrl)
     }
 
-    /// Escape user input for safe embedding in JQL queries
+    /// Escape user input for safe embedding in JQL quoted strings
     private func escapeJql(_ value: String) -> String {
-        return value
-            .replacingOccurrences(of: "\\", with: "\\\\")
-            .replacingOccurrences(of: "\"", with: "\\\"")
+        var result = value
+        result = result.replacingOccurrences(of: "\0", with: "")
+        result = result.replacingOccurrences(of: "\\", with: "\\\\")
+        result = result.replacingOccurrences(of: "\"", with: "\\\"")
+        result = result.replacingOccurrences(of: "'", with: "\\'")
+        result = result.replacingOccurrences(of: "\n", with: " ")
+        result = result.replacingOccurrences(of: "\r", with: " ")
+        return result
+    }
+
+    private func validateQueryInput(_ query: String) throws -> String {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            throw ToolError.missingParameter("query")
+        }
+        guard trimmed.count <= 500 else {
+            throw ToolError.executionFailed("Query too long (max 500 characters)")
+        }
+        return trimmed
     }
 
     // MARK: - Create Issue
@@ -784,6 +805,17 @@ class JiraClient: Tool {
         guard let summary = input["summary"] as? String else {
             throw ToolError.missingParameter("summary")
         }
+
+        // Validate inputs
+        let trimmedProject = project.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        guard trimmedProject.count >= 2, trimmedProject.count <= 10,
+              trimmedProject.allSatisfy({ $0.isLetter || $0.isNumber }) else {
+            throw ToolError.executionFailed("Invalid project key format (expected 2-10 alphanumeric characters)")
+        }
+        guard summary.count <= 255 else {
+            throw ToolError.executionFailed("Summary too long (max 255 characters)")
+        }
+
         let description = input["description"] as? String
         let issueType = (input["issue_type"] as? String) ?? "Task"
         let priority = input["priority"] as? String
@@ -815,7 +847,7 @@ class JiraClient: Tool {
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
-        request.setValue(await getAuthHeader(), forHTTPHeaderField: "Authorization")
+        request.setValue(try await getAuthHeader(), forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
@@ -877,6 +909,16 @@ class JiraClient: Tool {
             throw ToolError.missingParameter("comment")
         }
 
+        // Validate issue key format
+        let keyPattern = "^[A-Z]{2,10}-\\d+$"
+        guard let regex = try? NSRegularExpression(pattern: keyPattern),
+              regex.firstMatch(in: issueKey.uppercased(), range: NSRange(issueKey.startIndex..., in: issueKey)) != nil else {
+            throw ToolError.executionFailed("Invalid issue key format (expected e.g. PROJ-123)")
+        }
+        guard comment.count <= 32768 else {
+            throw ToolError.executionFailed("Comment too long (max 32768 characters)")
+        }
+
         let body: [String: Any] = [
             "body": [
                 "version": 1,
@@ -893,7 +935,7 @@ class JiraClient: Tool {
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
-        request.setValue(await getAuthHeader(), forHTTPHeaderField: "Authorization")
+        request.setValue(try await getAuthHeader(), forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.httpBody = try JSONSerialization.data(withJSONObject: body)

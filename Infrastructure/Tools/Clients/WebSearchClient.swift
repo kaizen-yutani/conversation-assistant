@@ -70,8 +70,11 @@ class WebSearchClient: Tool {
 
         let (data, response) = try await URLSession.shared.data(for: request)
 
-        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
-            throw ToolError.executionFailed("Search request failed")
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw ToolError.executionFailed("Invalid response from Tavily")
+        }
+        guard httpResponse.statusCode == 200 else {
+            throw ToolError.executionFailed(parseSearchError(provider: "Tavily", statusCode: httpResponse.statusCode))
         }
 
         let result = try JSONDecoder().decode(TavilyResponse.self, from: data)
@@ -108,8 +111,11 @@ class WebSearchClient: Tool {
 
         let (data, response) = try await URLSession.shared.data(for: request)
 
-        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
-            throw ToolError.executionFailed("Search request failed")
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw ToolError.executionFailed("Invalid response from Serper")
+        }
+        guard httpResponse.statusCode == 200 else {
+            throw ToolError.executionFailed(parseSearchError(provider: "Serper", statusCode: httpResponse.statusCode))
         }
 
         let result = try JSONDecoder().decode(SerperResponse.self, from: data)
@@ -143,8 +149,11 @@ class WebSearchClient: Tool {
 
         let (data, response) = try await URLSession.shared.data(for: request)
 
-        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
-            throw ToolError.executionFailed("Search request failed")
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw ToolError.executionFailed("Invalid response from Brave")
+        }
+        guard httpResponse.statusCode == 200 else {
+            throw ToolError.executionFailed(parseSearchError(provider: "Brave", statusCode: httpResponse.statusCode))
         }
 
         let result = try JSONDecoder().decode(BraveResponse.self, from: data)
@@ -162,6 +171,23 @@ class WebSearchClient: Tool {
         }.joined(separator: "\n\n---\n\n")
 
         return .success(content: content)
+    }
+
+    // MARK: - Error Handling
+
+    private func parseSearchError(provider: String, statusCode: Int) -> String {
+        switch statusCode {
+        case 401:
+            return "\(provider) authentication failed. Please check your API key in Settings."
+        case 403:
+            return "\(provider) access denied. Your API key may lack permissions or quota is exceeded."
+        case 429:
+            return "\(provider) rate limited. Please wait a moment and try again."
+        case 500...599:
+            return "\(provider) server error (\(statusCode)). Please try again later."
+        default:
+            return "\(provider) request failed (HTTP \(statusCode))."
+        }
     }
 }
 

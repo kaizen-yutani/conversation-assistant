@@ -137,6 +137,14 @@ enum OAuthConfig {
             NSLog("OAuth: No credentials file at ~/.conversation-assistant-oauth — OAuth disabled")
             return [:]
         }
+
+        // Enforce secure file permissions (owner read/write only)
+        if let attrs = try? FileManager.default.attributesOfItem(atPath: path),
+           let perms = attrs[.posixPermissions] as? Int, perms != 0o600 {
+            NSLog("OAuth: Fixing insecure permissions on credentials file")
+            try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: path)
+        }
+
         var config: [String: String] = [:]
         for line in content.components(separatedBy: .newlines) {
             let trimmed = line.trimmingCharacters(in: .whitespaces)

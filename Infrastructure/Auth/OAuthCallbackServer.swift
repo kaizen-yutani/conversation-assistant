@@ -10,6 +10,9 @@ final class OAuthCallbackServer {
     private var activePort: UInt16 = 0
     private var isRunning = false
 
+    /// Expected state parameter for CSRF validation
+    var expectedState: String?
+
     /// Ports to try for OAuth callback
     static let callbackPorts: [UInt16] = [9876, 9877, 9878, 19876, 29876]
 
@@ -199,6 +202,15 @@ final class OAuthCallbackServer {
 
         let queryString = String(firstLine[queryStart.upperBound..<queryEnd.lowerBound])
         let components = URLComponents(string: "http://localhost?\(queryString)")
+
+        // Validate state parameter if expected (CSRF protection)
+        if let expectedState = expectedState {
+            let returnedState = components?.queryItems?.first(where: { $0.name == "state" })?.value
+            guard returnedState == expectedState else {
+                NSLog("OAuth: State mismatch in callback server — possible CSRF attack")
+                return nil
+            }
+        }
 
         return components?.queryItems?.first(where: { $0.name == "code" })?.value
     }

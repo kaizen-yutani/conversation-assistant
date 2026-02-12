@@ -48,7 +48,8 @@ class ConfluenceClient: Tool {
     }
 
     /// Get auth header with automatic token refresh for OAuth
-    private func getAuthHeader() async -> String {
+    /// Throws if no valid authentication is available
+    private func getAuthHeader() async throws -> String {
         // Use OAuth if available - with automatic token refresh
         if DataSourceConfig.shared.isOAuthAuthenticated(.confluence) {
             if let token = await OAuthManager.shared.getValidAccessToken(for: .atlassian) {
@@ -59,7 +60,9 @@ class ConfluenceClient: Tool {
         }
 
         // Fall back to Basic Auth
-        guard let config = DataSourceConfig.shared.confluenceConfig else { return "" }
+        guard let config = DataSourceConfig.shared.confluenceConfig else {
+            throw ToolError.executionFailed("Authentication unavailable. Please reconnect Atlassian in Settings (⌘,).")
+        }
         let credentials = "\(config.username):\(config.apiToken)"
         let data = credentials.data(using: .utf8)!
         return "Basic \(data.base64EncodedString())"
@@ -70,14 +73,13 @@ class ConfluenceClient: Tool {
             throw ToolError.missingParameter("query")
         }
 
+        let validatedQuery = try validateQueryInput(query)
         let space = input["space"] as? String
 
-        // Build CQL query (escape quotes to prevent injection)
-        let escapedQuery = query.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
-        var cql = "text ~ \"\(escapedQuery)\""
+        // Build CQL query with proper escaping
+        var cql = "text ~ \"\(escapeCql(validatedQuery))\""
         if let space = space {
-            let escapedSpace = space.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
-            cql += " AND space = \"\(escapedSpace)\""
+            cql += " AND space = \"\(escapeCql(space))\""
         }
         cql += " ORDER BY lastModified DESC"
 
@@ -85,7 +87,7 @@ class ConfluenceClient: Tool {
         let (apiUrl, siteUrl) = try await getApiUrl(cql: cql)
 
         var request = URLRequest(url: apiUrl)
-        request.setValue(await getAuthHeader(), forHTTPHeaderField: "Authorization")
+        request.setValue(try await getAuthHeader(), forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
 
         do {
@@ -209,7 +211,7 @@ class ConfluenceClient: Tool {
         let (apiUrl, siteUrl) = try await getSpacesApiUrl(limit: limit)
 
         var request = URLRequest(url: apiUrl)
-        request.setValue(await getAuthHeader(), forHTTPHeaderField: "Authorization")
+        request.setValue(try await getAuthHeader(), forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
 
         let (data, response) = try await URLSession.shared.data(for: request)
@@ -281,8 +283,7 @@ class ConfluenceClient: Tool {
         // If we have a title but no page ID, search for the page
         if let title = title, pageId == nil {
             // Search for the page by title
-            let escapedTitle = title.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
-            let cql = "title = \"\(escapedTitle)\""
+            let cql = "title = \"\(escapeCql(title))\""
             guard let encodedCql = cql.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else {
                 throw ToolError.executionFailed("Invalid search query")
             }
@@ -290,7 +291,7 @@ class ConfluenceClient: Tool {
             let (searchUrl, siteUrl) = try await getApiUrl(cql: encodedCql)
 
             var searchRequest = URLRequest(url: searchUrl)
-            searchRequest.setValue(await getAuthHeader(), forHTTPHeaderField: "Authorization")
+            searchRequest.setValue(try await getAuthHeader(), forHTTPHeaderField: "Authorization")
             searchRequest.setValue("application/json", forHTTPHeaderField: "Accept")
 
             let (searchData, searchResponse) = try await URLSession.shared.data(for: searchRequest)
@@ -321,7 +322,7 @@ class ConfluenceClient: Tool {
         let (apiUrl, _) = try await getPageApiUrl(pageId: pageId)
 
         var request = URLRequest(url: apiUrl)
-        request.setValue(await getAuthHeader(), forHTTPHeaderField: "Authorization")
+        request.setValue(try await getAuthHeader(), forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
 
         let (data, response) = try await URLSession.shared.data(for: request)
@@ -412,7 +413,7 @@ class ConfluenceClient: Tool {
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
-        request.setValue(await getAuthHeader(), forHTTPHeaderField: "Authorization")
+        request.setValue(try await getAuthHeader(), forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
@@ -458,6 +459,29 @@ class ConfluenceClient: Tool {
             throw ToolError.executionFailed("Invalid URL")
         }
         return url
+    }
+
+    /// Escape user input for safe embedding in CQL quoted strings
+    private func escapeCql(_ value: String) -> String {
+        var result = value
+        result = result.replacingOccurrences(of: "\0", with: "")
+        result = result.replacingOccurrences(of: "\\", with: "\\\\")
+        result = result.replacingOccurrences(of: "\"", with: "\\\"")
+        result = result.replacingOccurrences(of: "'", with: "\\'")
+        result = result.replacingOccurrences(of: "\n", with: " ")
+        result = result.replacingOccurrences(of: "\r", with: " ")
+        return result
+    }
+
+    private func validateQueryInput(_ query: String) throws -> String {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            throw ToolError.missingParameter("query")
+        }
+        guard trimmed.count <= 500 else {
+            throw ToolError.executionFailed("Query too long (max 500 characters)")
+        }
+        return trimmed
     }
 
     /// Strip HTML tags from content (basic)

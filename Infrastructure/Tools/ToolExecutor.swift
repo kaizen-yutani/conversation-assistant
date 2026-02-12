@@ -4,8 +4,12 @@ import Foundation
 class ToolExecutor {
     static let shared = ToolExecutor()
 
-    /// Registered tool handlers keyed by tool name
-    private var tools: [String: Tool] = [:]
+    /// Registered tool handlers keyed by tool name (written once during init, then read-only)
+    private let toolQueue = DispatchQueue(label: "com.assistant.tool-registry", attributes: .concurrent)
+    private var _tools: [String: Tool] = [:]
+    private var tools: [String: Tool] {
+        toolQueue.sync { _tools }
+    }
 
     /// Icons for different tool types
     private let toolIcons: [String: String] = [
@@ -44,8 +48,10 @@ class ToolExecutor {
 
     /// Register a tool handler for all its supported tool names
     func registerTool(_ tool: Tool) {
-        for toolName in tool.supportedToolNames {
-            tools[toolName] = tool
+        toolQueue.sync(flags: .barrier) {
+            for toolName in tool.supportedToolNames {
+                _tools[toolName] = tool
+            }
         }
     }
 
@@ -154,14 +160,24 @@ extension ToolExecutor {
     }
 
     /// Execute with retry for transient failures (429, 5xx)
+    /// Uses exponential backoff and enforces a total time budget
     private func executeWithRetry(toolName: String, input: [String: Any]) async -> ToolResult {
+        let startTime = Date()
+        let maxTotalTime: TimeInterval = 45 // Total time budget across all retries
+
         var lastResult: ToolResult = .failure(error: "Unknown error")
         for attempt in 0...maxRetries {
+            // Check total time budget before each attempt
+            if attempt > 0 && Date().timeIntervalSince(startTime) >= maxTotalTime {
+                NSLog("  \u{26A0}\u{FE0F} \(toolName) exceeded total retry budget of \(Int(maxTotalTime))s")
+                return lastResult
+            }
+
             let result = await executeWithTimeout(toolName: toolName, input: input)
             lastResult = result
 
             if !result.success, let error = result.error, isRetryableError(error), attempt < maxRetries {
-                let delay = Double(attempt + 1) * 1.0
+                let delay = pow(2.0, Double(attempt)) // Exponential backoff: 1s, 2s, 4s
                 NSLog("  \u{26A0}\u{FE0F} \(toolName) retryable error, retry \(attempt + 1)/\(maxRetries) in \(delay)s")
                 try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
                 continue

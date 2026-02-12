@@ -18,6 +18,9 @@ class OAuthManager {
     /// Local callback server for providers that use localhost redirect (like GitHub)
     private var callbackServer: OAuthCallbackServer?
 
+    /// Deduplicates concurrent token refresh requests per provider
+    private var refreshTasks: [OAuthProvider: Task<Bool, Never>] = [:]
+
     private init() {}
 
     // MARK: - Start OAuth Flow
@@ -98,6 +101,11 @@ class OAuthManager {
         let server = OAuthCallbackServer()
         callbackServer = server
 
+        // Generate state parameter for CSRF protection
+        let state = UUID().uuidString
+        server.expectedState = state
+        pendingAuth = (provider, "", state)
+
         print("[OAuthManager] Created OAuthCallbackServer, calling start()...")
         NSLog("OAuth: Starting callback server...")
 
@@ -116,12 +124,9 @@ class OAuthManager {
                     URLQueryItem(name: "client_id", value: provider.clientId),
                     URLQueryItem(name: "redirect_uri", value: callbackURL),
                     URLQueryItem(name: "scope", value: provider.scopes),
-                    URLQueryItem(name: "response_type", value: "code")
+                    URLQueryItem(name: "response_type", value: "code"),
+                    URLQueryItem(name: "state", value: state)
                 ]
-
-                // Generate state parameter for security
-                let state = UUID().uuidString
-                components.queryItems?.append(URLQueryItem(name: "state", value: state))
 
                 guard let url = components.url else {
                     NSLog("OAuth: Failed to build authorization URL")
@@ -191,13 +196,18 @@ class OAuthManager {
             return
         }
 
-        // Validate state parameter to prevent CSRF attacks
-        if let urlComponents = URLComponents(url: url, resolvingAgainstBaseURL: false),
-           let returnedState = urlComponents.queryItems?.first(where: { $0.name == "state" })?.value {
-            guard returnedState == pending.state else {
-                NSLog("OAuth: State mismatch — possible CSRF attack. Expected: \(pending.state), got: \(returnedState)")
-                return
-            }
+        // Validate state parameter to prevent CSRF attacks (REQUIRED)
+        let urlComponents = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        let returnedState = urlComponents?.queryItems?.first(where: { $0.name == "state" })?.value
+        guard let returnedState = returnedState, returnedState == pending.state else {
+            NSLog("OAuth: State parameter missing or mismatched — possible CSRF attack")
+            NotificationCenter.default.post(
+                name: .oauthFailed,
+                object: nil,
+                userInfo: ["provider": provider, "error": "Authentication failed: security validation error"]
+            )
+            pendingAuth = nil
+            return
         }
 
         NSLog("OAuth: Exchanging code for token...")
@@ -285,9 +295,8 @@ class OAuthManager {
     }
 
     private func parseTokenResponse(data: Data, provider: OAuthProvider) throws -> TokenResponse {
-        // Log raw response for debugging
         let responseString = String(data: data, encoding: .utf8) ?? "(binary data)"
-        NSLog("OAuth: Raw token response: \(responseString)")
+        NSLog("OAuth: Token response length: \(responseString.count) bytes")
 
         // Try JSON first (GitHub returns JSON when Accept: application/json is set)
         if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
@@ -569,6 +578,7 @@ class OAuthManager {
 
     /// Get a valid access token, refreshing if necessary
     /// Returns nil if not connected or refresh fails
+    /// Deduplicates concurrent refresh requests to prevent token race conditions
     func getValidAccessToken(for provider: OAuthProvider) async -> String? {
         guard isConnected(provider: provider) else {
             return nil
@@ -587,13 +597,20 @@ class OAuthManager {
             return nil
         }
 
-        // Attempt refresh
-        let success = await refreshToken(for: provider)
-        if success {
-            return getAccessToken(for: provider)
+        // Deduplicate: if a refresh is already in progress, wait for it
+        if let existingTask = refreshTasks[provider] {
+            NSLog("OAuth: Reusing in-flight refresh for \(provider.displayName)")
+            let success = await existingTask.value
+            return success ? getAccessToken(for: provider) : nil
         }
 
-        return nil
+        // Start new refresh task
+        let task = Task { await refreshToken(for: provider) }
+        refreshTasks[provider] = task
+        let success = await task.value
+        refreshTasks[provider] = nil
+
+        return success ? getAccessToken(for: provider) : nil
     }
 
     /// Refresh the access token using the refresh token
