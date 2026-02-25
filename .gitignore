@@ -1,0 +1,62 @@
+# Build artifacts
+build/
+*.app/
+*.dmg
+*.pkg
+AppIcon.icns
+icon_1024.png
+
+# macOS
+.DS_Store
+
+# Audio
+*.aiff
+*.mp3
+
+# Binaries
+ConversationAssistant
+InterviewMaster
+interview_master_full
+
+# IDE / Tools
+.serena/
+.vscode/
+.idea/
+*.xcodeproj/
+*.xcworkspace/
+xcuserdata/
+
+# Runtime
+logs/
+
+# npm (claude-code dev tool, not part of the app)
+node_modules/
+package-lock.json
+package.json
+
+# Development scratch files
+play_demo.sh
+neumorphic_canvas.swift
+keyword_spotter_test.swift
+keyword_spotter_vad.swift
+test_classification.swift
+screenshot-indicator-fix.swift
+voice.sh
+
+# Internal docs (not for public)
+APP_STORE_METADATA.md
+APP_STORE_SUBMISSION.md
+MAC_APP_STORE_SUBMISSION.md
+SCREENSHOTS_GUIDE.md
+README-RELEASE.md
+SUGGESTIONS.md
+notarization_log.txt
+
+# Interview data (private)
+interview.txt
+interview_analysis.md
+interview_scripts/
+
+# Secrets / Environment
+.env
+.env.*
